@@ -1,7 +1,5 @@
 #pragma once
 #include <chrono>
-#include <functional>
-#include <thread>
 
 namespace ADSB
 {
@@ -20,17 +18,17 @@ struct IAirCraft
     virtual ~IAirCraft() = default;
 };
 
-struct Listener
+struct IListener
 {
-    using Callback = std::function<void(IModeMessage const&, IAirCraft const&)>;
+    IListener(std::string_view const& deviceName) : _deviceName(deviceName) {}
+    virtual ~IListener() = default;
 
-    void OnMessage(Callback&& callback) { _callback = std::move(callback); }
-    void Invoke(IModeMessage const&, IAirCraft const&) const;
+    virtual void OnMessage(IModeMessage const&, IAirCraft const&) = 0;
+
     void Start();
     void Stop();
 
     private:
-    std::thread _thread;
-    Callback    _callback;
+    std::string _deviceName;
 };
 }    // namespace ADSB

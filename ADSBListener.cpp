@@ -3,7 +3,7 @@
 #include <stdexcept>
 
 // TODO : Thread safety
-static ADSB::Listener* singletonListener = nullptr;
+static ADSB::IListener* singletonListener = nullptr;
 
 extern "C" void startlistener(const char*);
 extern "C" void stoplistener();
@@ -18,7 +18,7 @@ struct AirCraftImpl : ADSB::IAirCraft
     AirCraftImpl(struct aircraft* a) {}
 };
 
-void ADSB::Listener::Start()
+void ADSB::IListener::Start()
 {
     if (singletonListener != nullptr)
     {
@@ -29,7 +29,16 @@ void ADSB::Listener::Start()
     startlistener("0");
 }
 
+void ADSB::IListener::Stop()
+{
+    stoplistener();
+}
+
 extern "C" void modesQueueOutput(struct modesMessage* mm, struct aircraft* a)
 {
-    singletonListener->Invoke(ModeMessageImpl(mm), AirCraftImpl(a));
+    singletonListener->OnMessage(ModeMessageImpl(mm), AirCraftImpl(a));
+}
+
+extern "C" void modesSendAllClients(int service, void* msg, int len)
+{
 }
