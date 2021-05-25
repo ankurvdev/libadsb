@@ -29,6 +29,8 @@
 //
 #include "dump1090.h"
 #include "coaa.h"
+struct ProgramState Modes;
+
 //
 // ============================= Utility functions ==========================
 //
