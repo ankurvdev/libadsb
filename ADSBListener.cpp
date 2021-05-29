@@ -11,7 +11,8 @@ extern "C"
 // TODO : Thread safety
 static ADSB::IListener* singletonListener = nullptr;
 
-extern "C" void startlistener(const char*);
+extern "C" int initlistener(const char*);
+extern "C" void startlistener();
 extern "C" void stoplistener();
 
 struct ModeMessageImpl : ADSB::IModeMessage
@@ -40,7 +41,13 @@ struct AirCraftImpl : ADSB::IAirCraft
 
 struct Dum1090DataProvider : ADSB::IDataProvider
 {
-    Dum1090DataProvider(std::string_view const& deviceName) : _deviceName(deviceName) {}
+    Dum1090DataProvider(std::string_view const& deviceName) : _deviceName(deviceName)
+    {
+        if (initlistener(_deviceName.c_str()) != 0)
+        {
+            throw std::runtime_error("Cannot initialize device");
+        }
+    }
 
     virtual void Start(ADSB::IListener& listener) override
     {
@@ -51,7 +58,7 @@ struct Dum1090DataProvider : ADSB::IDataProvider
 
         singletonListener = &listener;
 
-        _thrd = std::thread([&]() { startlistener(_deviceName.c_str()); });
+        _thrd = std::thread([&]() { startlistener(); });
     }
 
     virtual void Stop() override

@@ -95,7 +95,7 @@ void modesInitConfig(void)
 //
 //=========================================================================
 //
-void modesInit(void)
+int modesInit(void)
 {
     int i, q;
 
@@ -112,7 +112,7 @@ void modesInit(void)
         || ((Modes.rawOut = (char*)malloc(MODES_RAWOUT_BUF_SIZE)) == NULL))
     {
         fprintf(stderr, "Out of memory allocating data buffer.\n");
-        exit(1);
+        return -1;
     }
 
     // Clear the buffers that have just been allocated, just in-case
@@ -211,11 +211,12 @@ void modesInit(void)
 
     // Prepare error correction tables
     modesInitErrorInfo();
+    return 0;
 }
 //
 // =============================== RTLSDR handling ==========================
 //
-void modesInitRTLSDR(void)
+int modesInitRTLSDR(void)
 {
     int  j;
     int  device_count;
@@ -225,7 +226,8 @@ void modesInitRTLSDR(void)
     if (!device_count)
     {
         fprintf(stderr, "No supported RTLSDR devices found.\n");
-        exit(1);
+        return -1;
+        // return -1;
     }
 
     fprintf(stderr, "Found %d device(s):\n", device_count);
@@ -238,7 +240,7 @@ void modesInitRTLSDR(void)
     if (rtlsdr_open(&Modes.dev, Modes.dev_index) < 0)
     {
         fprintf(stderr, "Error opening the RTLSDR device: %s\n", strerror(errno));
-        exit(1);
+        return -1;
     }
 
     // Set gain, frequency, sample rate, and reset the device
@@ -268,6 +270,7 @@ void modesInitRTLSDR(void)
     rtlsdr_set_sample_rate(Modes.dev, MODES_DEFAULT_RATE);
     rtlsdr_reset_buffer(Modes.dev);
     fprintf(stderr, "Gain reported by device: %.2f\n", rtlsdr_get_tuner_gain(Modes.dev) / 10.0);
+    return 0;
 }
 //
 //=========================================================================
@@ -538,7 +541,7 @@ static void display_stats(void)
     time_t now = time(NULL);
 
     printf("\n\n");
-    //if (Modes.interactive) interactiveShowData();
+    // if (Modes.interactive) interactiveShowData();
 
     printf("Statistics as at %s", ctime(&now));
 
@@ -611,19 +614,19 @@ void backgroundTasks(void)
 
     if (Modes.net)
     {
-        //modesReadFromClients();
+        // modesReadFromClients();
     }
 
     // If Modes.aircrafts is not NULL, remove any stale aircraft
     if (Modes.aircrafts)
     {
-        //interactiveRemoveStaleAircrafts();
+        // interactiveRemoveStaleAircrafts();
     }
 
     // Refresh screen when in interactive mode
     if (Modes.interactive)
     {
-        //interactiveShowData();
+        // interactiveShowData();
     }
 
     if (Modes.stats > 0)
@@ -711,13 +714,13 @@ int verbose_device_search(char* s)
 //
 //=========================================================================
 //
-int startlistener(const char * deviceName)
+int initlistener(const char* deviceName)
 {
     int j;
 
     // Set sane defaults
     modesInitConfig();
-    //signal(SIGINT, sigintHandler);    // Define Ctrl/C handler (exit program)
+    // signal(SIGINT, sigintHandler);    // Define Ctrl/C handler (exit program)
     Modes.dev_index = verbose_device_search(deviceName);
 
 #ifdef _WIN32
@@ -745,7 +748,10 @@ int startlistener(const char * deviceName)
     }
     else if (Modes.filename == NULL)
     {
-        modesInitRTLSDR();
+        if (modesInitRTLSDR() != 0)
+        {
+            return -1;
+        }
     }
     else
     {
@@ -763,10 +769,10 @@ int startlistener(const char * deviceName)
                  == -1)
         {
             perror("Opening data file");
-            exit(1);
+            // return -1;
         }
     }
-    //if (Modes.net) modesInitNet();
+    // if (Modes.net) modesInitNet();
 
     // If the user specifies --net-only, just run in order to serve network
     // clients without reading data from the RTL device
@@ -776,7 +782,11 @@ int startlistener(const char * deviceName)
         backgroundTasks();
         usleep(100000);
     }
+    return 0;
+}
 
+void startlistener(const char* deviceName)
+{
     // Create the thread that will read the data from the device.
     pthread_create(&Modes.reader_thread, NULL, readerThreadEntryPoint, NULL);
     pthread_mutex_lock(&Modes.data_mutex);
@@ -853,7 +863,6 @@ int startlistener(const char * deviceName)
 #ifndef _WIN32
     pthread_exit(0);
 #else
-    return (0);
 #endif
 }
 //
