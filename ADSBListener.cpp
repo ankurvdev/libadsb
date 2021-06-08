@@ -7,13 +7,16 @@ extern "C"
 {
 #include "dump1090.h"
 }
+#include "RTLSDR.h"
 
 // TODO : Thread safety
 static ADSB::IListener* singletonListener = nullptr;
 
-extern "C" int initlistener(const char*);
+extern "C" int  initlistener(uint32_t index);
 extern "C" void startlistener();
 extern "C" void stoplistener();
+extern "C" int  process_buffer(uint8_t const* phi, size_t len, uint64_t offset);
+extern "C" void init_fec();
 
 struct ModeMessageImpl : ADSB::IModeMessage
 {
@@ -22,7 +25,7 @@ struct ModeMessageImpl : ADSB::IModeMessage
 
 struct AirCraftImpl : ADSB::IAirCraft
 {
-    AirCraftImpl(struct aircraft* a) {}
+    AirCraftImpl(struct aircraft* a) : _a(a) {}
 
     virtual uint32_t         MessageCount() const override { return 0; }
     virtual uint32_t         Addr() const override { return _a->addr; }
@@ -39,17 +42,34 @@ struct AirCraftImpl : ADSB::IAirCraft
     struct aircraft* _a;
 };
 
-struct Dum1090DataProvider : ADSB::IDataProvider
+struct MessageHandler978 : RTLSDR::IDataHandler
 {
-    Dum1090DataProvider(std::string_view const& deviceName) : _deviceName(deviceName)
+    MessageHandler978(uint32_t index978) : _listener978{index978, RTLSDR::Config{.gain = 48, .frequency = 978000000, .sampleRate = 2083334}}
     {
-        if (initlistener(_deviceName.c_str()) != 0)
+    }
+    // Inherited via IDataHandler
+    virtual void HandleData(std::span<uint8_t const> const& data) override { process_buffer(data.data(), data.size() / 2, 0); }
+
+    void Start(ADSB::IListener& listener)
+    {
+        init_fec();
+        _listener978.Start(this);
+    }
+    void Stop() { _listener978.Stop(); }
+
+    RTLSDR _listener978;
+};
+
+struct MessageHandler1090
+{
+    MessageHandler1090(uint32_t index978)
+    {
+        if (initlistener(index978) != 0)
         {
             throw std::runtime_error("Cannot initialize device");
         }
     }
-
-    virtual void Start(ADSB::IListener& listener) override
+    void Start(ADSB::IListener& listener)
     {
         if (singletonListener != nullptr)
         {
@@ -61,7 +81,7 @@ struct Dum1090DataProvider : ADSB::IDataProvider
         _thrd = std::thread([&]() { startlistener(); });
     }
 
-    virtual void Stop() override
+    void Stop()
     {
         stoplistener();
         _thrd.join();
@@ -69,12 +89,45 @@ struct Dum1090DataProvider : ADSB::IDataProvider
     }
 
     std::thread _thrd;
-    std::string _deviceName;
+};
+
+struct ADSBDataProviderImpl : ADSB::IDataProvider
+{
+    ADSBDataProviderImpl(uint32_t index978, uint32_t index1090)
+    {
+        if (index978 != std::numeric_limits<uint32_t>::max())
+        {
+            _handler978.reset(new MessageHandler978(index978));
+        }
+        if (index1090 != std::numeric_limits<uint32_t>::max())
+        {
+            _handler1090.reset(new MessageHandler1090(index1090));
+        }
+    }
+
+    virtual void Start(ADSB::IListener& listener) override
+    {
+        if (_handler978) _handler978->Start(listener);
+        if (_handler1090) _handler1090->Start(listener);
+    }
+
+    virtual void Stop() override
+    {
+        if (_handler978) _handler978->Stop();
+        if (_handler1090) _handler1090->Stop();
+    }
+
+    std::unique_ptr<MessageHandler978>  _handler978;
+    std::unique_ptr<MessageHandler1090> _handler1090;
 };
 
 extern "C" void modesQueueOutput(struct modesMessage* mm)
 {
-    singletonListener->OnMessage(ModeMessageImpl(mm), AirCraftImpl(interactiveFindAircraft(mm->addr)));
+    auto a = interactiveFindAircraft(mm->addr);
+    if (a)
+    {
+        singletonListener->OnMessage(ModeMessageImpl(mm), AirCraftImpl(a));
+    }
 }
 
 extern "C" void modesSendAllClients(int service, void* msg, int len)
@@ -83,5 +136,19 @@ extern "C" void modesSendAllClients(int service, void* msg, int len)
 
 std::unique_ptr<ADSB::IDataProvider> ADSB::CreateDump1090Provider(std::string_view const& deviceName)
 {
-    return std::make_unique<Dum1090DataProvider>(deviceName);
+    auto devices   = RTLSDR::GetAllDevices();
+    auto index978  = std::numeric_limits<uint32_t>::max();
+    auto index1090 = std::numeric_limits<uint32_t>::max();
+    for (auto& d : devices)
+    {
+        if (std::string_view(d.serial).find("978") != std::string_view::npos)
+        {
+            index978 = d.index;
+        }
+        else if (std::string_view(d.serial).find("1090") != std::string_view::npos)
+        {
+            index1090 = d.index;
+        }
+    }
+    return std::make_unique<ADSBDataProviderImpl>(index978, index1090);
 }

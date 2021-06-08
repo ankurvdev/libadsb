@@ -656,8 +656,14 @@ int verbose_device_search(char* s)
     fprintf(stderr, "Found %d device(s):\n", device_count);
     for (i = 0; i < device_count; i++)
     {
-        rtlsdr_get_device_usb_strings(i, vendor, product, serial);
-        fprintf(stderr, "  %d:  %s, %s, SN: %s\n", i, vendor, product, serial);
+        if (rtlsdr_get_device_usb_strings(i, vendor, product, serial) < 0)
+        {
+            fprintf(stderr, "Error Fetching device information for Device: %d", i);
+        }
+        else
+        {
+            fprintf(stderr, "  %d:  %s, %s, SN: %s\n", i, vendor, product, serial);
+        }
     }
     fprintf(stderr, "\n");
     /* does string look like raw id number */
@@ -714,15 +720,15 @@ int verbose_device_search(char* s)
 //
 //=========================================================================
 //
-int initlistener(const char* deviceName)
+int initlistener(uint32_t index)
 {
     int j;
 
     // Set sane defaults
     modesInitConfig();
     // signal(SIGINT, sigintHandler);    // Define Ctrl/C handler (exit program)
-    Modes.dev_index = verbose_device_search(deviceName);
-
+    Modes.dev_index = index;
+    Modes.net       = 1;
 #ifdef _WIN32
     // Try to comply with the Copyright license conditions for binary distribution
     if (!Modes.quiet)
