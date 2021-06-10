@@ -802,8 +802,6 @@ void startlistener(const char* deviceName)
             // Translate the next lot of I/Q samples into Modes.magnitude
             computeMagnitudeVector(Modes.pData[Modes.iDataOut]);
 
-            Modes.stSystemTimeBlk = Modes.stSystemTimeRTL[Modes.iDataOut];
-
             // Update the input buffer pointer queue
             Modes.iDataOut   = (MODES_ASYNC_BUF_NUMBER - 1) & (Modes.iDataOut + 1);
             Modes.iDataReady = (MODES_ASYNC_BUF_NUMBER - 1) & (Modes.iDataIn - Modes.iDataOut);
