@@ -157,13 +157,6 @@ int modesInit(void)
         Modes.net_sndbuf_size = MODES_NET_SNDBUF_MAX;
     }
 
-    // Initialise the Block Timers to something half sensible
-    ftime(&Modes.stSystemTimeBlk);
-    for (i = 0; i < MODES_ASYNC_BUF_NUMBER; i++)
-    {
-        Modes.stSystemTimeRTL[i] = Modes.stSystemTimeBlk;
-    }
-
     // Each I and Q value varies from 0 to 255, which represents a range from -1 to +1. To get from the
     // unsigned (0-255) range you therefore subtract 127 (or 128 or 127.5) from each I and Q, giving you
     // a range from -127 to +128 (or -128 to +127, or -127.5 to +127.5)..
@@ -293,9 +286,6 @@ void rtlsdrCallback(unsigned char* buf, uint32_t len, void* ctx)
 
     Modes.iDataIn &= (MODES_ASYNC_BUF_NUMBER - 1);    // Just incase!!!
 
-    // Get the system time for this block
-    ftime(&Modes.stSystemTimeRTL[Modes.iDataIn]);
-
     if (len > MODES_ASYNC_BUF_SIZE)
     {
         len = MODES_ASYNC_BUF_SIZE;
@@ -371,9 +361,6 @@ void readDataFromFile(void)
         }
 
         Modes.iDataIn &= (MODES_ASYNC_BUF_NUMBER - 1);    // Just incase!!!
-
-        // Get the system time for this block
-        ftime(&Modes.stSystemTimeRTL[Modes.iDataIn]);
 
         // Queue the new data
         Modes.pData[Modes.iDataIn] = Modes.pFileData;
