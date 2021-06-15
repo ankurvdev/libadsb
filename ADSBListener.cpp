@@ -103,6 +103,10 @@ struct ADSBDataProviderImpl : ADSB::IDataProvider
         {
             _handler1090.reset(new MessageHandler1090(index1090));
         }
+        if (_handler1090 == nullptr || _handler978 == nullptr)
+        {
+            throw std::runtime_error("Cannot find USB Device for 1090Mhz or 978Mhz");
+        }
     }
 
     virtual void Start(ADSB::IListener& listener) override
