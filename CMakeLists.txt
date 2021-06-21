@@ -1,12 +1,7 @@
 cmake_minimum_required(VERSION 3.19)
 project(libadsb)
-
+set(CMAKE_CXX_STANDARD 20)
 file(GLOB dump1090sources dump1090/*.c)
-
-
-foreach (f dispatcher flavor.x86_avx2 flavor.generic)
-    list(APPEND dspsources dump1090/dsp/generated/${f}.c)
-endforeach()
 
 set(excludes
     interactive.c #curses
@@ -22,12 +17,16 @@ set(excludes
 foreach(ex ${excludes})
     list(FILTER dump1090sources EXCLUDE REGEX "dump1090/${ex}")
 endforeach()
-add_library(dump1090 OBJECT ${dump1090sources} ${dspsources} dump1090/dsp/helpers/tables.c)
+
+add_library(dump1090 OBJECT ${dump1090sources})
 target_include_directories(dump1090 PRIVATE dump1090 dump1090/dsp/generated)
 target_compile_definitions(dump1090 PRIVATE STARCH_MIX_X86)
-add_library(adsb OBJECT ADSBListener.h ADSBListener.cpp dump1090.c)
+add_library(adsb OBJECT ADSBListener.h ADSBListener.cpp dump1090-wrapper.c)
 target_include_directories(adsb PRIVATE dump1090 dump1090/dsp/generated)
 
 add_executable(test main.cpp)
 find_package(Threads)
+add_subdirectory(libusb/cmake)
+add_subdirectory(rtl-sdr)
 target_link_libraries(test PRIVATE adsb dump1090 rtlsdr Threads::Threads)
+target_include_directories(test PRIVATE "${hdr}")

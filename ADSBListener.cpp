@@ -1,6 +1,9 @@
 #include "ADSBListener.h"
 
+#include <fstream>
+#include <span>
 #include <stdexcept>
+#include <string_view>
 #include <thread>
 
 extern "C"
@@ -8,15 +11,14 @@ extern "C"
 #include "dump1090.h"
 }
 #include "RTLSDR.h"
-
+#include "UAT978.h"
 // TODO : Thread safety
 static ADSB::IListener* singletonListener = nullptr;
 
-extern "C" int  initlistener(uint32_t index);
-extern "C" void startlistener();
-extern "C" void stoplistener();
-extern "C" int  process_buffer(uint8_t const* phi, size_t len, uint64_t offset);
-extern "C" void init_fec();
+extern "C" int                        initlistener(uint32_t index);
+extern "C" void                       startlistener();
+extern "C" void                       stoplistener();
+std::unique_ptr<RTLSDR::IDataHandler> CreateMessageHandler978(size_t index);
 
 struct ModeMessageImpl : ADSB::IModeMessage
 {
@@ -40,24 +42,6 @@ struct AirCraftImpl : ADSB::IAirCraft
     virtual int32_t          Lon1E7() const override { return static_cast<int32_t>(_a->lon * 10000000.0); }
 
     struct aircraft* _a;
-};
-
-struct MessageHandler978 : RTLSDR::IDataHandler
-{
-    MessageHandler978(uint32_t index978) : _listener978{index978, RTLSDR::Config{.gain = 48, .frequency = 978000000, .sampleRate = 2083334}}
-    {
-    }
-    // Inherited via IDataHandler
-    virtual void HandleData(std::span<uint8_t const> const& data) override { process_buffer(data.data(), data.size() / 2, 0); }
-
-    void Start(ADSB::IListener& listener)
-    {
-        init_fec();
-        _listener978.Start(this);
-    }
-    void Stop() { _listener978.Stop(); }
-
-    RTLSDR _listener978;
 };
 
 struct MessageHandler1090
@@ -97,13 +81,27 @@ struct ADSBDataProviderImpl : ADSB::IDataProvider
     {
         if (index978 != std::numeric_limits<uint32_t>::max())
         {
-            _handler978.reset(new MessageHandler978(index978));
+            try
+            {
+                _handler978.reset(new MessageHandler978(index978));
+            }
+            catch (std::exception const& ex)
+            {
+                std::cerr << "Cannot open device for 978Mhz" << std::endl;
+            }
         }
         if (index1090 != std::numeric_limits<uint32_t>::max())
         {
-            _handler1090.reset(new MessageHandler1090(index1090));
+            try
+            {
+                _handler1090.reset(new MessageHandler1090(index1090));
+            }
+            catch (std::exception const& ex)
+            {
+                std::cerr << "Cannot open device for 1090Mhz" << std::endl;
+            }
         }
-        if (_handler1090 == nullptr || _handler978 == nullptr)
+        if (_handler1090 == nullptr && _handler978 == nullptr)
         {
             throw std::runtime_error("Cannot find USB Device for 1090Mhz or 978Mhz");
         }
@@ -143,6 +141,14 @@ std::unique_ptr<ADSB::IDataProvider> ADSB::CreateDump1090Provider(std::string_vi
     auto devices   = RTLSDR::GetAllDevices();
     auto index978  = std::numeric_limits<uint32_t>::max();
     auto index1090 = std::numeric_limits<uint32_t>::max();
+    if (std::filesystem::exists("978000000.test.dat"))
+    {
+        index978 = 0;
+    }
+    if (std::filesystem::exists("1090000000.test.dat"))
+    {
+        index1090 = 0;
+    }
     for (auto& d : devices)
     {
         if (std::string_view(d.serial).find("978") != std::string_view::npos)

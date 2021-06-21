@@ -1,8 +1,10 @@
+#pragma once
 #include <rtl-sdr.h>
 
 #include <condition_variable>
 #include <cstddef>
 #include <cstdint>
+#include <filesystem>
 #include <iostream>
 #include <mutex>
 #include <span>
@@ -61,6 +63,13 @@ struct RTLSDR
 
     RTLSDR(uint32_t deviceIndex, Config const& config) : _config(config)
     {
+        _testDataFile = std::filesystem::absolute(std::to_string(config.frequency) + ".test.dat");
+        if (std::filesystem::exists(_testDataFile))
+        {
+            _useTestDataFile = true;
+            return;
+        }
+
         if (rtlsdr_open(&_dev, deviceIndex) < 0) throw std::runtime_error("No supported RTLSDR devices found");
 
         /* Set gain, frequency, sample rate, and reset the device. */
@@ -93,13 +102,52 @@ struct RTLSDR
         _cyclicBuffer.resize(_config.bufferCount);
     }
 
+    void _TestDataReadLoop()
+    {
+        std::vector<std::vector<uint8_t>> buffers;
+        for (size_t i = 0; i < _config.bufferCount; i++)
+        {
+            buffers.push_back(std::vector<uint8_t>(_config.bufferLength));
+        }
+        _testDataIFS = std::ifstream(_testDataFile.string(), std::ios::binary | std::ios::in);
+        if (!_testDataIFS.good())
+        {
+            throw std::runtime_error("Cannot open test data file");
+        }
+        size_t bufferToUse = 0;
+        while (!_stopRequested)
+        {
+            _testDataIFS.read(reinterpret_cast<char*>(buffers[bufferToUse].data()), _config.bufferLength);
+            if (!_testDataIFS.good())
+            {
+                _testDataIFS.close();
+                _testDataIFS = std::ifstream(_testDataFile.string(), std::ios::binary | std::ios::in);
+                if (!_testDataIFS.good())
+                {
+                    throw std::runtime_error("Cannot open test data file");
+                }
+                continue;
+            }
+            _OnDataAvailable(buffers[bufferToUse]);
+            bufferToUse = (bufferToUse + 1) % _config.bufferCount;
+        }
+        _testDataIFS.close();
+    }
+
     void Start(IDataHandler* handler)
     {
         Stop();
-        _handler      = handler;
-        _started      = true;
-        _producerThrd = std::thread(
-            [this]() { rtlsdr_read_async(_dev, _Callback, this, _config.bufferCount, _config.bufferCount * _config.bufferLength); });
+        _handler = handler;
+        _started = true;
+        if (_useTestDataFile)
+        {
+            _producerThrd = std::thread([this]() { _TestDataReadLoop(); });
+        }
+        else
+        {
+            _producerThrd = std::thread(
+                [this]() { rtlsdr_read_async(_dev, _Callback, this, _config.bufferCount, _config.bufferCount * _config.bufferLength); });
+        }
         _consumerThrd = std::thread([this]() { this->_ConsumerThreadLoop(); });
     }
 
@@ -110,8 +158,11 @@ struct RTLSDR
             return;
         }
         _stopRequested = true;
+        if (!_useTestDataFile)
+        {
+            rtlsdr_cancel_async(_dev);
+        }
 
-        rtlsdr_cancel_async(_dev);
         _cvDataConsumed.notify_one();
         _cvDataAvailable.notify_one();
         _producerThrd.join();
@@ -198,4 +249,9 @@ struct RTLSDR
     std::condition_variable _cvDataConsumed;
     std::atomic_bool        _stopRequested{false};
     std::atomic_bool        _started{false};
+
+    std::ifstream         _testDataIFS;
+    std::filesystem::path _testDataFile;
+    bool                  _useTestDataFile = false;
+    std::thread           _testDataThread;
 };
