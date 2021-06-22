@@ -41,6 +41,7 @@ macro(EnableStrictCompilation)
 
     if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
         set(extraflags
+            #/showIncludes
             /Wall   # Enable all errors
             /WX     # All warnings as errors
             /await

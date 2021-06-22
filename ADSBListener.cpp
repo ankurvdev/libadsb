@@ -6,50 +6,20 @@
 #include <stdexcept>
 #include <string_view>
 #include <thread>
-SUPPRESS_WARNINGS_START
-SUPPRESS_MSVC_STL_WARNINGS
 
-extern "C"
-{
-#include "dump1090.h"
-}
-SUPPRESS_WARNINGS_END
-
+#include "ADSB1090.h"
+#include "AircraftImpl.h"
 #include "RTLSDR.h"
-
 #include "UAT978.h"
+
 // TODO : Thread safety
 static ADSB::IListener* singletonListener = nullptr;
-
-extern "C" int                        initlistener(uint32_t index);
-extern "C" void                       startlistener();
-extern "C" void                       stoplistener();
-std::unique_ptr<RTLSDR::IDataHandler> CreateMessageHandler978(size_t index);
 
 struct ModeMessageImpl : ADSB::IModeMessage
 {
     ModeMessageImpl(struct modesMessage* /*mm*/) {}
 };
-
-struct AirCraftImpl : ADSB::IAirCraft
-{
-    AirCraftImpl(struct aircraft* a) : _a(a) {}
-
-    virtual uint32_t         MessageCount() const override { return 0; }
-    virtual uint32_t         Addr() const override { return _a->addr; }
-    virtual std::string_view FlightNumber() const override { return _a->flight; }
-    virtual time_point       LastSeen() const override { return time_point::clock::from_time_t(_a->seen); }
-    virtual uint32_t         SquakCode() const override { return static_cast<uint32_t>(_a->modeA); }
-    virtual int32_t          Altitude() const override { return _a->altitude; }
-    virtual uint32_t         Speed() const override { return static_cast<uint32_t>(_a->speed); }
-    virtual uint32_t         Heading() const override { return static_cast<uint32_t>(_a->track); }
-    virtual int32_t          Climb() const override { return _a->vert_rate; }
-    virtual int32_t          Lat1E7() const override { return static_cast<int32_t>(_a->lat * 10000000.0); }
-    virtual int32_t          Lon1E7() const override { return static_cast<int32_t>(_a->lon * 10000000.0); }
-
-    struct aircraft* _a;
-};
-
+#if 0
 struct MessageHandler1090
 {
     MessageHandler1090(uint32_t index978)
@@ -82,34 +52,15 @@ struct MessageHandler1090
 
     std::thread _thrd;
 };
+#endif
 
 struct ADSBDataProviderImpl : ADSB::IDataProvider
 {
     CLASS_DELETE_COPY_AND_MOVE(ADSBDataProviderImpl);
-    ADSBDataProviderImpl(uint32_t index978, uint32_t index1090)
+    ADSBDataProviderImpl()
     {
-        if (index978 != std::numeric_limits<uint32_t>::max())
-        {
-            try
-            {
-                _handler978.reset(new MessageHandler978(index978));
-            }
-            catch (std::exception const& ex)
-            {
-                std::cerr << "Cannot open device for 978Mhz: " << ex.what() << std::endl;
-            }
-        }
-        if (index1090 != std::numeric_limits<uint32_t>::max())
-        {
-            try
-            {
-                _handler1090.reset(new MessageHandler1090(index1090));
-            }
-            catch (std::exception const& ex)
-            {
-                std::cerr << "Cannot open device for 1090Mhz " << ex.what() << std::endl;
-            }
-        }
+        _handler978  = UAT978Handler::TryCreate();
+        _handler1090 = ADSB1090Handler::TryCreate();
         if (_handler1090 == nullptr && _handler978 == nullptr)
         {
             throw std::runtime_error("Cannot find USB Device for 1090Mhz or 978Mhz");
@@ -128,10 +79,10 @@ struct ADSBDataProviderImpl : ADSB::IDataProvider
         if (_handler1090) _handler1090->Stop();
     }
 
-    std::unique_ptr<MessageHandler978>  _handler978;
-    std::unique_ptr<MessageHandler1090> _handler1090;
+    std::unique_ptr<UAT978Handler>   _handler978;
+    std::unique_ptr<ADSB1090Handler> _handler1090;
 };
-
+#if 0
 extern "C" void modesQueueOutput(struct modesMessage* mm)
 {
     auto a = interactiveFindAircraft(mm->addr);
@@ -144,30 +95,8 @@ extern "C" void modesQueueOutput(struct modesMessage* mm)
 extern "C" void modesSendAllClients(int /*service*/, void* /*msg*/, int /*len*/)
 {
 }
-
+#endif
 std::unique_ptr<ADSB::IDataProvider> ADSB::CreateDump1090Provider(std::string_view const& /*deviceName*/)
 {
-    auto devices   = RTLSDR::GetAllDevices();
-    auto index978  = std::numeric_limits<uint32_t>::max();
-    auto index1090 = std::numeric_limits<uint32_t>::max();
-    if (std::filesystem::exists("978000000.test.dat"))
-    {
-        index978 = 0;
-    }
-    if (std::filesystem::exists("1090000000.test.dat"))
-    {
-        index1090 = 0;
-    }
-    for (auto& d : devices)
-    {
-        if (std::string_view(d.serial).find("978") != std::string_view::npos)
-        {
-            index978 = d.index;
-        }
-        else if (std::string_view(d.serial).find("1090") != std::string_view::npos)
-        {
-            index1090 = d.index;
-        }
-    }
-    return std::make_unique<ADSBDataProviderImpl>(index978, index1090);
+    return std::make_unique<ADSBDataProviderImpl>();
 }

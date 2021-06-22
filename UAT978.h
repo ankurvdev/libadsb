@@ -1,20 +1,21 @@
+#pragma once
+
 #include "RTLSDR.h"
 
 #include <cmath>
-#define M_PI 3.14159265358979323846
 
 extern "C" void init_fec();
 extern "C" int  process_buffer(uint16_t const*, size_t len, uint64_t c);
 extern "C" void make_atan2_table();
 extern "C" void convert_to_phi(uint16_t* buffer, int n);
 
-struct MessageHandler978 : RTLSDR::IDataHandler
+struct UAT978Handler : RTLSDR::IDataHandler
 {
-    MessageHandler978(uint32_t index978) : _listener978{index978, RTLSDR::Config{.gain = 48, .frequency = 978000000, .sampleRate = 2083334}}
+    UAT978Handler(uint32_t index978) : _listener978{index978, RTLSDR::Config{.gain = 48, .frequency = 978000000, .sampleRate = 2083334}}
     {
     }
 
-    CLASS_DELETE_COPY_AND_MOVE(MessageHandler978);
+    CLASS_DELETE_COPY_AND_MOVE(UAT978Handler);
 
     // Inherited via IDataHandler
     virtual void HandleData(std::span<uint8_t const> const& dataBytes) override
@@ -77,4 +78,22 @@ struct MessageHandler978 : RTLSDR::IDataHandler
     uint64_t _offset = 0;
     uint16_t _buffer[256 * 256];
     uint16_t _iqphase[256 * 256];
+
+    static std::unique_ptr<UAT978Handler> TryCreate() 
+    {
+        auto devices   = RTLSDR::GetAllDevices();
+        auto fs      = std::filesystem::absolute("978000000.test.dat");
+        if (std::filesystem::exists(fs))
+        {
+            return std::make_unique<UAT978Handler>(0u);
+        }
+        for (auto& d : devices)
+        {
+            if (std::string_view(d.serial).find("978") != std::string_view::npos)
+            {
+                return std::make_unique<UAT978Handler>(d.index);
+            }
+        }
+        return {};
+    }
 };
