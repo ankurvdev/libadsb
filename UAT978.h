@@ -4,14 +4,22 @@
 
 #include <cmath>
 
-extern "C" void init_fec();
-extern "C" int  process_buffer(uint16_t const*, size_t len, uint64_t c);
-extern "C" void make_atan2_table();
-extern "C" void convert_to_phi(uint16_t* buffer, int n);
+extern "C" void                  init_fec();
+extern "C" int                   process_buffer(uint16_t const*, size_t len, uint64_t c);
+extern "C" void                  make_atan2_table();
+extern "C" void                  convert_to_phi(uint16_t* buffer, int n);
+std::shared_ptr<TrafficManager>& GetThreadLocalTrafficManager();
+
+std::shared_ptr<TrafficManager>& GetThreadLocalTrafficManager()
+{
+    static thread_local std::shared_ptr<TrafficManager> manager;
+    return manager;
+}
 
 struct UAT978Handler : RTLSDR::IDataHandler
 {
-    UAT978Handler(uint32_t index978) : _listener978{index978, RTLSDR::Config{.gain = 48, .frequency = 978000000, .sampleRate = 2083334}}
+    UAT978Handler(std::shared_ptr<TrafficManager> trafficManager, uint32_t index978) :
+        _trafficManager(trafficManager), _listener978{index978, RTLSDR::Config{.gain = 48, .frequency = 978000000, .sampleRate = 2083334}}
     {
     }
 
@@ -21,6 +29,7 @@ struct UAT978Handler : RTLSDR::IDataHandler
     virtual void HandleData(std::span<uint8_t const> const& dataBytes) override
     {
         std::span<uint16_t const> data(reinterpret_cast<uint16_t const*>(dataBytes.data()), dataBytes.size() / 2);
+        GetThreadLocalTrafficManager() = _trafficManager;
 
         size_t j = 0;
         size_t i = _used;
@@ -32,10 +41,10 @@ struct UAT978Handler : RTLSDR::IDataHandler
             }
 
             auto bufferProcessed = process_buffer(_buffer, i, _offset);
-            _offset+= bufferProcessed;
+            _offset += bufferProcessed;
             // Move the rest of the buffer to the start
             memmove(_buffer, _buffer + bufferProcessed, i - bufferProcessed);
-            _used = i - bufferProcessed; 
+            _used = i - bufferProcessed;
         }
     }
 
@@ -73,25 +82,26 @@ struct UAT978Handler : RTLSDR::IDataHandler
         }
     }
 
-    RTLSDR   _listener978;
-    size_t   _used;
-    uint64_t _offset = 0;
-    uint16_t _buffer[256 * 256];
-    uint16_t _iqphase[256 * 256];
+    std::shared_ptr<TrafficManager> _trafficManager;
+    RTLSDR                          _listener978;
+    size_t                          _used   = 0;
+    uint64_t                        _offset = 0;
+    uint16_t                        _buffer[256 * 256];
+    uint16_t                        _iqphase[256 * 256];
 
-    static std::unique_ptr<UAT978Handler> TryCreate() 
+    static std::unique_ptr<UAT978Handler> TryCreate(std::shared_ptr<TrafficManager> trafficManager)
     {
-        auto devices   = RTLSDR::GetAllDevices();
+        auto devices = RTLSDR::GetAllDevices();
         auto fs      = std::filesystem::absolute("978000000.test.dat");
         if (std::filesystem::exists(fs))
         {
-            return std::make_unique<UAT978Handler>(0u);
+            return std::make_unique<UAT978Handler>(trafficManager, 0u);
         }
         for (auto& d : devices)
         {
             if (std::string_view(d.serial).find("978") != std::string_view::npos)
             {
-                return std::make_unique<UAT978Handler>(d.index);
+                return std::make_unique<UAT978Handler>(trafficManager, d.index);
             }
         }
         return {};

@@ -1,13 +1,15 @@
 #pragma once
 #include "ADSBListener.h"
 
+#include <memory>
+#include <unordered_map>
 struct AirCraftImpl : ADSB::IAirCraft
 {
     AirCraftImpl() = default;
 
     virtual uint32_t         MessageCount() const override { return 0; }
     virtual uint32_t         Addr() const override { return addr; }
-    virtual std::string_view FlightNumber() const override { return flight; }
+    virtual std::string_view FlightNumber() const override { return callsign; }
     virtual time_point       LastSeen() const override { return seen; }
     virtual uint32_t         SquakCode() const override { return modeA; }
     virtual int32_t          Altitude() const override { return altitude; }
@@ -18,7 +20,7 @@ struct AirCraftImpl : ADSB::IAirCraft
     virtual int32_t          Lon1E7() const override { return static_cast<int32_t>(lon * 10000000.0); }
 
     uint32_t   addr{0};
-    char       flight[7]{};
+    char       callsign[9]{};
     time_point seen{};
     uint32_t   modeA{};
     int32_t    altitude{};
@@ -27,4 +29,28 @@ struct AirCraftImpl : ADSB::IAirCraft
     int32_t    vert_rate{};
     double     lat{};
     double     lon{};
+};
+
+struct TrafficManager : std::enable_shared_from_this<TrafficManager>
+{
+    AirCraftImpl& FindOrCreate(uint32_t addr)
+    {
+        auto it = _aircrafts.find(addr);
+        if (it != _aircrafts.end())
+        {
+            return *it->second.get();
+        }
+
+        auto aptr        = new AirCraftImpl();
+        _aircrafts[addr] = std::unique_ptr<AirCraftImpl>(aptr);
+        auto& a          = *aptr;
+        a.addr           = addr;
+        return a;
+    }
+
+    void SetListener(ADSB::IListener* l) { _listener = l; }
+    void NotifyChanged(AirCraftImpl const& a) { _listener->OnChanged(a); }
+
+    std::unordered_map<uint32_t, std::unique_ptr<AirCraftImpl>> _aircrafts;
+    ADSB::IListener*                                            _listener{nullptr};
 };

@@ -123,7 +123,8 @@ struct ADSB1090Handler : RTLSDR::IDataHandler
         return lut;
     }
 
-    ADSB1090Handler(uint32_t index1090) : _listener1090{index1090, RTLSDR::Config{.frequency = 1090000000, .sampleRate = 2000000}}
+    ADSB1090Handler(std::shared_ptr<TrafficManager> trafficManager, uint32_t index1090) :
+        _trafficManager(trafficManager), _listener1090{index1090, RTLSDR::Config{.frequency = 1090000000, .sampleRate = 2000000}}
     {
         std::cout << "ADSB Tracker Initializing" << std::endl;
     }
@@ -183,37 +184,37 @@ struct ADSB1090Handler : RTLSDR::IDataHandler
     void _useModesMessage(Message* mm);
     void _modesSendSBSOutput(Message* mm, AirCraftImpl& a);
 
-    static std::unique_ptr<ADSB1090Handler> TryCreate()
+    static std::unique_ptr<ADSB1090Handler> TryCreate(std::shared_ptr<TrafficManager> trafficManager)
     {
         auto devices = RTLSDR::GetAllDevices();
         if (std::filesystem::exists("1090000000.test.dat"))
         {
-            return std::make_unique<ADSB1090Handler>(0u);
+            return std::make_unique<ADSB1090Handler>(trafficManager, 0u);
         }
         for (auto& d : devices)
         {
             if (std::string_view(d.serial).find("1090") != std::string_view::npos)
             {
-                return std::make_unique<ADSB1090Handler>(d.index);
+                return std::make_unique<ADSB1090Handler>(trafficManager, d.index);
             }
         }
         return {};
     }
 
     std::unordered_map<uint32_t, std::chrono::system_clock::time_point> _icaoTimestamps;
-    std::unordered_map<uint32_t, std::unique_ptr<AirCraftImpl>>         _aircrafts;
 
     Config                _config{};
     std::vector<uint16_t> _magnitudesLookupTable = _CreateLUT();
     std::vector<uint8_t>  _data;
     std::vector<uint16_t> _magnitudeVector = std::vector<uint16_t>(BufferLength, 0xffff);
 
+    std::shared_ptr<TrafficManager> _trafficManager;
+
     // DataRecorder<AirCraftImpl> _recorder;
     std::mutex        _mutex;
     std::thread       _thrd;
     std::atomic<bool> _stopRequested{false};
     RTLSDR            _listener1090;
-
     /* Statistics */
     long long _stat_valid_preamble{};
     long long _stat_demodulated{};
@@ -976,19 +977,7 @@ void ADSB1090Handler::_useModesMessage(Message* mm)
  * of aircrafts. */
 AirCraftImpl& ADSB1090Handler::_interactiveFindOrCreateAircraft(uint32_t addr)
 {
-    auto it = _aircrafts.find(addr);
-    if (it != _aircrafts.end())
-    {
-        return *it->second.get();
-    }
-
-    auto aptr        = new AirCraftImpl();
-    _aircrafts[addr] = std::unique_ptr<AirCraftImpl>(aptr);
-    auto& a          = *aptr;
-    a.addr           = addr;
-
-    //  snprintf(a.tailNumber().data(), a.tailNumber().size(), "%06x", static_cast<int>(addr));
-    return a;
+    return _trafficManager->FindOrCreate(addr);
 }
 #if 0
 /* Always positive MOD operation, used for CPR decoding. */

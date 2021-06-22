@@ -67,7 +67,15 @@ struct RTLSDR
 
     RTLSDR(uint32_t deviceIndex, Config const& config) : _config(config)
     {
+        _sizeMask = _config.bufferCount - 1;
+        if ((_config.bufferCount & _sizeMask) != 0)
+        {
+            throw std::logic_error("Buffer Count requested is not a power of 2");
+        }
+        _cyclicBuffer.resize(_config.bufferCount);
+
         _testDataFile = std::filesystem::absolute(std::to_string(config.frequency) + ".test.dat");
+
         if (std::filesystem::exists(_testDataFile))
         {
             _useTestDataFile = true;
@@ -98,12 +106,6 @@ struct RTLSDR
         rtlsdr_reset_buffer(_dev);
         _currentGain = rtlsdr_get_tuner_gain(_dev) / 10;
 
-        _sizeMask = _config.bufferCount - 1;
-        if ((_config.bufferCount & _sizeMask) != 0)
-        {
-            throw std::logic_error("Buffer Count requested is not a power of 2");
-        }
-        _cyclicBuffer.resize(_config.bufferCount);
     }
 
     CLASS_DELETE_COPY_AND_MOVE(RTLSDR);

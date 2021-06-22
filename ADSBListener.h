@@ -1,18 +1,13 @@
 #pragma once
 #include <chrono>
-#include <string_view>
 #include <memory>
+#include <string_view>
 
 namespace ADSB
 {
 struct Config
 {
     std::chrono::duration<std::chrono::system_clock> ttl;
-};
-
-struct IModeMessage
-{
-    virtual ~IModeMessage() = default;
 };
 
 struct IAirCraft
@@ -35,8 +30,8 @@ struct IAirCraft
 
 struct IListener
 {
-    virtual ~IListener()                                          = default;
-    virtual void OnMessage(IModeMessage const&, IAirCraft const&) = 0;
+    virtual ~IListener()                     = default;
+    virtual void OnChanged(IAirCraft const&) = 0;
 };
 
 struct IDataProvider

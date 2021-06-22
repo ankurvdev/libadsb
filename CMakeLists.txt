@@ -73,7 +73,7 @@ target_link_libraries(dump978 PRIVATE rtlsdr_static)
 #add_library(dump1090 OBJECT ${dump1090sources})
 #target_link_libraries(dump1090 Threads::Threads rtlsdr_static)
 #arget_compile_definitions(dump1090 PRIVATE STARCH_MIX_X86)
-add_library(adsb OBJECT ADSBListener.h ADSBListener.cpp ADSB1090.h)
+add_library(adsb OBJECT ADSBListener.h ADSBListener.cpp ADSB1090.h uat2json-wrapper.cpp)
 target_link_libraries(adsb PUBLIC dump978 rtlsdr_static Threads::Threads)
 target_include_directories(adsb PRIVATE dump1090)
 

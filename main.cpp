@@ -57,8 +57,10 @@ struct ADSBTrackerImpl : ADSB::IListener
     }
 #endif
 
-    void OnMessage(ADSB::IModeMessage const& /*msg*/, ADSB::IAirCraft const& /*a*/) override
+    void OnChanged(ADSB::IAirCraft const& a) override
     {
+        std::cout << a.FlightNumber() << ":" << std::hex << a.Addr() << ":" << std::dec << " Speed:" << a.Speed() << " Alt:" << a.Altitude()
+                  << " Heading:" << a.Heading() << " Climb:" << a.Climb() << " Lat:" << a.Lat1E7() << " Lon:" << a.Lon1E7() << std::endl;
 #if 0
         auto addr   = a.Addr();
         auto ctx    = EditData();
@@ -94,6 +96,6 @@ struct ADSBTrackerImpl : ADSB::IListener
 int main()
 {
     ADSBTrackerImpl tracker("");
-
-    std::this_thread::sleep_for(10s);
+    while (true) std::this_thread::sleep_for(10s);
+    return 0;
 }
