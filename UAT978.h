@@ -1,7 +1,10 @@
 #include "RTLSDR.h"
 
+#include <cmath>
+#define M_PI 3.14159265358979323846
+
 extern "C" void init_fec();
-extern "C" int  process_buffer(uint16_t const*, size_t len, int c);
+extern "C" int  process_buffer(uint16_t const*, size_t len, uint64_t c);
 extern "C" void make_atan2_table();
 extern "C" void convert_to_phi(uint16_t* buffer, int n);
 
@@ -10,6 +13,8 @@ struct MessageHandler978 : RTLSDR::IDataHandler
     MessageHandler978(uint32_t index978) : _listener978{index978, RTLSDR::Config{.gain = 48, .frequency = 978000000, .sampleRate = 2083334}}
     {
     }
+
+    CLASS_DELETE_COPY_AND_MOVE(MessageHandler978);
 
     // Inherited via IDataHandler
     virtual void HandleData(std::span<uint8_t const> const& dataBytes) override
@@ -33,7 +38,7 @@ struct MessageHandler978 : RTLSDR::IDataHandler
         }
     }
 
-    void Start(ADSB::IListener& listener)
+    void Start(ADSB::IListener& /*listener*/)
     {
         _InitATan2Table();
         init_fec();
@@ -60,9 +65,9 @@ struct MessageHandler978 : RTLSDR::IDataHandler
                 double ang        = atan2(d_q, d_i) + M_PI;    // atan2 returns [-pi..pi], normalize to [0..2*pi]
                 double scaled_ang = round(32768 * ang / M_PI);
 
-                u.iq[0]          = i;
-                u.iq[1]          = q;
-                _iqphase[u.iq16] = (scaled_ang < 0 ? 0 : scaled_ang > 65535 ? 65535 : (uint16_t)scaled_ang);
+                u.iq[0]          = static_cast<uint8_t>(i);
+                u.iq[1]          = static_cast<uint8_t>(q);
+                _iqphase[u.iq16] = static_cast<uint16_t>(scaled_ang < 0 ? 0 : scaled_ang > 65535 ? 65535 : scaled_ang);
             }
         }
     }

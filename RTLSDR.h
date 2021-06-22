@@ -1,5 +1,8 @@
 #pragma once
+#include "CommonMacros.h"
+
 #include <rtl-sdr.h>
+
 
 #include <condition_variable>
 #include <cstddef>
@@ -33,18 +36,18 @@ struct RTLSDR
     {
         int      gain         = MaxGain;
         bool     enableAGC    = false;
-        size_t   bufferLength = BufferLength;
-        size_t   bufferCount  = BufferCount;
+        uint32_t bufferLength = BufferLength;
+        uint32_t bufferCount  = BufferCount;
         uint32_t frequency    = CenterFrequency;
         uint32_t sampleRate   = SampleRate;
     };
 
     struct DeviceInfo
     {
-        size_t index;
-        char   vendor[256];
-        char   product[256];
-        char   serial[256];
+        uint32_t index;
+        char     vendor[256];
+        char     product[256];
+        char     serial[256];
     };
 
     static std::vector<DeviceInfo> GetAllDevices()
@@ -101,6 +104,8 @@ struct RTLSDR
         }
         _cyclicBuffer.resize(_config.bufferCount);
     }
+
+    CLASS_DELETE_COPY_AND_MOVE(RTLSDR);
 
     void _TestDataReadLoop()
     {
@@ -223,7 +228,17 @@ struct RTLSDR
     }
 
     private:
-    static void _Callback(uint8_t* buf, uint32_t len, void* ctx) { reinterpret_cast<RTLSDR*>(ctx)->_OnDataAvailable({buf, len}); }
+    static void _Callback(uint8_t* buf, uint32_t len, void* ctx) noexcept
+    {
+        try
+        {
+            reinterpret_cast<RTLSDR*>(ctx)->_OnDataAvailable({buf, len});
+        }
+        catch (std::exception const& ex)
+        {
+            std::cerr << ex.what() << std::endl;
+        }
+    }
 
     int _currentGain{};
 

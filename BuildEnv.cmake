@@ -36,7 +36,7 @@ macro(_FixFlags name)
 endmacro()
 
 macro(EnableStrictCompilation)
-    find_package(Threads)
+    #find_package(Threads)
     file(TIMESTAMP ${CMAKE_CURRENT_LIST_FILE} filetime)
 
     if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")

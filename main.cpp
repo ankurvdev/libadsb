@@ -57,7 +57,7 @@ struct ADSBTrackerImpl : ADSB::IListener
     }
 #endif
 
-    void OnMessage(ADSB::IModeMessage const& /*msg*/, ADSB::IAirCraft const& a) override
+    void OnMessage(ADSB::IModeMessage const& /*msg*/, ADSB::IAirCraft const& /*a*/) override
     {
 #if 0
         auto addr   = a.Addr();

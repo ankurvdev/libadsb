@@ -1,16 +1,22 @@
 #include "ADSBListener.h"
+#include "CommonMacros.h"
 
 #include <fstream>
 #include <span>
 #include <stdexcept>
 #include <string_view>
 #include <thread>
+SUPPRESS_WARNINGS_START
+SUPPRESS_MSVC_STL_WARNINGS
 
 extern "C"
 {
 #include "dump1090.h"
 }
+SUPPRESS_WARNINGS_END
+
 #include "RTLSDR.h"
+
 #include "UAT978.h"
 // TODO : Thread safety
 static ADSB::IListener* singletonListener = nullptr;
@@ -22,7 +28,7 @@ std::unique_ptr<RTLSDR::IDataHandler> CreateMessageHandler978(size_t index);
 
 struct ModeMessageImpl : ADSB::IModeMessage
 {
-    ModeMessageImpl(struct modesMessage* mm) {}
+    ModeMessageImpl(struct modesMessage* /*mm*/) {}
 };
 
 struct AirCraftImpl : ADSB::IAirCraft
@@ -33,10 +39,10 @@ struct AirCraftImpl : ADSB::IAirCraft
     virtual uint32_t         Addr() const override { return _a->addr; }
     virtual std::string_view FlightNumber() const override { return _a->flight; }
     virtual time_point       LastSeen() const override { return time_point::clock::from_time_t(_a->seen); }
-    virtual uint32_t         SquakCode() const override { return _a->modeA; }
+    virtual uint32_t         SquakCode() const override { return static_cast<uint32_t>(_a->modeA); }
     virtual int32_t          Altitude() const override { return _a->altitude; }
-    virtual uint32_t         Speed() const override { return _a->speed; }
-    virtual uint32_t         Heading() const override { return _a->track; }
+    virtual uint32_t         Speed() const override { return static_cast<uint32_t>(_a->speed); }
+    virtual uint32_t         Heading() const override { return static_cast<uint32_t>(_a->track); }
     virtual int32_t          Climb() const override { return _a->vert_rate; }
     virtual int32_t          Lat1E7() const override { return static_cast<int32_t>(_a->lat * 10000000.0); }
     virtual int32_t          Lon1E7() const override { return static_cast<int32_t>(_a->lon * 10000000.0); }
@@ -53,6 +59,8 @@ struct MessageHandler1090
             throw std::runtime_error("Cannot initialize device");
         }
     }
+    CLASS_DELETE_COPY_AND_MOVE(MessageHandler1090);
+
     void Start(ADSB::IListener& listener)
     {
         if (singletonListener != nullptr)
@@ -77,6 +85,7 @@ struct MessageHandler1090
 
 struct ADSBDataProviderImpl : ADSB::IDataProvider
 {
+    CLASS_DELETE_COPY_AND_MOVE(ADSBDataProviderImpl);
     ADSBDataProviderImpl(uint32_t index978, uint32_t index1090)
     {
         if (index978 != std::numeric_limits<uint32_t>::max())
@@ -87,7 +96,7 @@ struct ADSBDataProviderImpl : ADSB::IDataProvider
             }
             catch (std::exception const& ex)
             {
-                std::cerr << "Cannot open device for 978Mhz" << std::endl;
+                std::cerr << "Cannot open device for 978Mhz: " << ex.what() << std::endl;
             }
         }
         if (index1090 != std::numeric_limits<uint32_t>::max())
@@ -98,7 +107,7 @@ struct ADSBDataProviderImpl : ADSB::IDataProvider
             }
             catch (std::exception const& ex)
             {
-                std::cerr << "Cannot open device for 1090Mhz" << std::endl;
+                std::cerr << "Cannot open device for 1090Mhz " << ex.what() << std::endl;
             }
         }
         if (_handler1090 == nullptr && _handler978 == nullptr)
@@ -132,11 +141,11 @@ extern "C" void modesQueueOutput(struct modesMessage* mm)
     }
 }
 
-extern "C" void modesSendAllClients(int service, void* msg, int len)
+extern "C" void modesSendAllClients(int /*service*/, void* /*msg*/, int /*len*/)
 {
 }
 
-std::unique_ptr<ADSB::IDataProvider> ADSB::CreateDump1090Provider(std::string_view const& deviceName)
+std::unique_ptr<ADSB::IDataProvider> ADSB::CreateDump1090Provider(std::string_view const& /*deviceName*/)
 {
     auto devices   = RTLSDR::GetAllDevices();
     auto index978  = std::numeric_limits<uint32_t>::max();
