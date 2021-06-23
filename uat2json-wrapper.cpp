@@ -110,8 +110,8 @@ void dump_raw_message(char /*updown*/, uint8_t* data, int /*len*/, int /*rs_erro
     {
         switch (mdb.sec_altitude_type)
         {
-        case ALT_BARO: mdb.sec_altitude; break;
-        case ALT_GEO: mdb.sec_altitude; break;
+        case ALT_BARO: /*mdb.sec_altitude;*/ break;
+        case ALT_GEO: /*mdb.sec_altitude;*/ break;
         case ALT_INVALID:
         default: break;
         }

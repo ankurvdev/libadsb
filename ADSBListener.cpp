@@ -12,9 +12,6 @@
 #include "RTLSDR.h"
 #include "UAT978.h"
 
-// TODO : Thread safety
-static ADSB::IListener* singletonListener = nullptr;
-
 struct ADSBDataProviderImpl : ADSB::IDataProvider
 {
     CLASS_DELETE_COPY_AND_MOVE(ADSBDataProviderImpl);
