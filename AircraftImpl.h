@@ -16,8 +16,11 @@ struct AirCraftImpl : ADSB::IAirCraft
     virtual uint32_t         Speed() const override { return speed; }
     virtual uint32_t         Heading() const override { return track; }
     virtual int32_t          Climb() const override { return vert_rate; }
-    virtual int32_t          Lat1E7() const override { return static_cast<int32_t>(lat * 10000000.0); }
-    virtual int32_t          Lon1E7() const override { return static_cast<int32_t>(lon * 10000000.0); }
+    //    virtual int32_t Lat1E7() const override { return static_cast<int32_t>(((odd_time > even_time) ? odd_lat : even_lat) * 10000000.0);
+    //    } virtual int32_t Lon1E7() const override { return static_cast<int32_t>(((odd_time > even_time) ? odd_lon : even_lon) *
+    //    10000000.0); }
+    virtual int32_t Lat1E7() const override { return static_cast<int32_t>(lat * 10000000.0); }
+    virtual int32_t Lon1E7() const override { return static_cast<int32_t>(lon * 10000000.0); }
 
     uint32_t   addr{0};
     char       callsign[9]{};
@@ -29,6 +32,14 @@ struct AirCraftImpl : ADSB::IAirCraft
     int32_t    vert_rate{};
     double     lat{};
     double     lon{};
+
+    // Used for 1090 ADSB Decoding
+    double     cpr_odd_lat{};
+    double     cpr_odd_lon{};
+    time_point cpr_odd_time{};
+    double     cpr_even_lat{};
+    double     cpr_even_lon{};
+    time_point cpr_even_time{};
 };
 
 struct TrafficManager : std::enable_shared_from_this<TrafficManager>

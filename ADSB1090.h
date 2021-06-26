@@ -967,8 +967,9 @@ void ADSB1090Handler::_useModesMessage(Message* mm)
     {
         return;
     }
-
-    //_modesSendSBSOutput(mm, _interactiveReceiveData(mm)); /* Feed SBS output clients. */
+    _interactiveReceiveData(mm);
+    // uint32_t addr = (static_cast<uint32_t>(mm->aa1) << 16) | (static_cast<uint32_t>(mm->aa2) << 8) | static_cast<uint32_t>(mm->aa3);
+    //_modesSendSBSOutput(mm, _interactiveFindOrCreateAircraft(addr)); /* Feed SBS output clients. */
 }
 
 /* ========================= Interactive mode =============================== */
@@ -979,7 +980,7 @@ AirCraftImpl& ADSB1090Handler::_interactiveFindOrCreateAircraft(uint32_t addr)
 {
     return _trafficManager->FindOrCreate(addr);
 }
-#if 0
+
 /* Always positive MOD operation, used for CPR decoding. */
 static int cprModFunction(int a, int b)
 {
@@ -1080,10 +1081,10 @@ static void decodeCPR(AirCraftImpl& a)
 {
     double       AirDlat0 = 360.0 / 60;
     const double AirDlat1 = 360.0 / 59;
-    double       lat0     = a.even_cprlat();
-    double       lat1     = a.odd_cprlat();
-    double       lon0     = a.even_cprlon();
-    double       lon1     = a.odd_cprlon();
+    double       lat0     = a.cpr_even_lat;
+    double       lat1     = a.cpr_odd_lat;
+    double       lon0     = a.cpr_even_lon;
+    double       lon1     = a.cpr_odd_lon;
 
     /* Compute the Latitude Index "j" */
     int    j     = static_cast<int>(floor(((59 * lat0 - 60 * lat1) / 131072) + 0.5));
@@ -1097,23 +1098,23 @@ static void decodeCPR(AirCraftImpl& a)
     if (cprNLFunction(rlat0) != cprNLFunction(rlat1)) return;
 
     /* Compute ni and the longitude index m */
-    if (a.even_cprtime() > a.odd_cprtime())
+    if (a.cpr_even_time > a.cpr_odd_time)
     {
         /* Use even packet. */
         int ni = cprNFunction(rlat0, 0);
         int m  = static_cast<int>(floor((((lon0 * (cprNLFunction(rlat0) - 1)) - (lon1 * cprNLFunction(rlat0))) / 131072) + 0.5));
-        a.set_lon(cprDlonFunction(rlat0, 0) * (cprModFunction(m, ni) + lon0 / 131072));
-        a.set_lat(double{rlat0});
+        a.lon  = (cprDlonFunction(rlat0, 0) * (cprModFunction(m, ni) + lon0 / 131072));
+        a.lat  = (double{rlat0});
     }
     else
     {
         /* Use odd packet. */
         int ni = cprNFunction(rlat1, 1);
         int m  = static_cast<int>(floor((((lon0 * (cprNLFunction(rlat1) - 1)) - (lon1 * cprNLFunction(rlat1))) / 131072.0) + 0.5));
-        a.set_lon(cprDlonFunction(rlat1, 1) * (cprModFunction(m, ni) + lon1 / 131072));
-        a.set_lat(double{rlat1});
+        a.lon  = (cprDlonFunction(rlat1, 1) * (cprModFunction(m, ni) + lon1 / 131072));
+        a.lat  = (double{rlat1});
     }
-    if (a.lon() > 180) a.lon() -= 360;
+    if (a.lon > 180) a.lon -= 360;
 }
 
 /* Receive new messages and populate the interactive mode with more info. */
@@ -1121,8 +1122,9 @@ AirCraftImpl& ADSB1090Handler::_interactiveReceiveData(Message* mm)
 {
     uint32_t addr = static_cast<uint32_t>((mm->aa1 << 16) | (mm->aa2 << 8) | mm->aa3);
 
-    auto now = std::chrono::system_clock::now();
-
+    auto  now = std::chrono::system_clock::now();
+    auto& a   = _interactiveFindOrCreateAircraft(addr);
+#if 0
     /* Loookup our AirCraftImpl or create a new one. */
     auto& subctx = [&](uint32_t addr) {
         auto& allaircrafts = ctx.Obj().aircrafts();
@@ -1145,38 +1147,41 @@ AirCraftImpl& ADSB1090Handler::_interactiveReceiveData(Message* mm)
     auto  next    = (current + 1) % subctx.Obj().loc().size();
     auto& locctx  = subctx.edit_loc(next);
     auto& curloc  = subctx.Obj().loc()[current];
-
     locctx.set_seen(now);
     // a.set_messageCount(int32_t{a.messageCount() + 1});
+#endif
 
     if (mm->msgtype == 0 || mm->msgtype == 4 || mm->msgtype == 20)
     {
-        locctx.set_altitude(int32_t{mm->altitude});
+        a.altitude = (static_cast<int32_t>(mm->altitude));
+
+        // locctx.set_altitude(int32_t{mm->altitude});
     }
     else if (mm->msgtype == 17)
     {
         if (mm->metype >= 1 && mm->metype <= 4)
         {
-            memcpy(a.flight().data(), mm->flight, a.flight().size());
+            std::copy(std::begin(mm->flight), std::end(mm->flight), std::begin(a.callsign));
+            //    memcpy(a.flight().data(), mm->flight, a.flight().size());
         }
         else if (mm->metype >= 9 && mm->metype <= 18)
         {
-            a.set_altitude(int32_t{mm->altitude});
+            a.altitude = (static_cast<int32_t>(mm->altitude));
             if (mm->fflag)
             {
-                a.set_odd_cprlat(int32_t{mm->raw_latitude});
-                a.set_odd_cprlon(int32_t{mm->raw_longitude});
-                a.set_odd_cprtime(decltype(now){now});
+                a.cpr_odd_lat  = (int32_t{mm->raw_latitude});
+                a.cpr_odd_lon  = (int32_t{mm->raw_longitude});
+                a.cpr_odd_time = (decltype(now){now});
             }
             else
             {
-                a.set_even_cprlat(int32_t{mm->raw_latitude});
-                a.set_even_cprlon(int32_t{mm->raw_longitude});
-                a.set_even_cprtime(decltype(now){now});
+                a.cpr_even_lat  = (int32_t{mm->raw_latitude});
+                a.cpr_even_lon  = (int32_t{mm->raw_longitude});
+                a.cpr_even_time = (decltype(now){now});
             }
             /* If the two data is less than 10 seconds apart, compute
              * the position. */
-            if (std::abs(std::chrono::duration_cast<std::chrono::seconds>(a.even_cprtime() - a.odd_cprtime()).count()) <= 10)
+            if (std::abs(std::chrono::duration_cast<std::chrono::seconds>(a.cpr_even_time - a.cpr_odd_time).count()) <= 10)
             {
                 decodeCPR(a);
             }
@@ -1185,8 +1190,8 @@ AirCraftImpl& ADSB1090Handler::_interactiveReceiveData(Message* mm)
         {
             if (mm->mesub == 1 || mm->mesub == 2)
             {
-                locctx.set_groundSpeed(int32_t{mm->velocity});
-                locctx.set_track(int32_t{mm->heading});
+                a.speed = static_cast<int32_t>(mm->velocity);
+                a.track = static_cast<int32_t>(mm->heading);
             }
         }
     }
@@ -1212,9 +1217,11 @@ AirCraftImpl& ADSB1090Handler::_interactiveReceiveData(Message* mm)
     //   handler->OnTrafficUpdate(lock, a);
     //}
 #endif
+    _trafficManager->NotifyChanged(a);
     return a;
 }
-#endif
+
+#if 0
 /* Write SBS output to TCP clients. */
 void ADSB1090Handler::_modesSendSBSOutput(Message* mm, AirCraftImpl& a)
 {
@@ -1287,5 +1294,7 @@ void ADSB1090Handler::_modesSendSBSOutput(Message* mm, AirCraftImpl& a)
     }
 
     *p++ = '\n';
+    std::cout << msg << std::endl;
     // modesSendAllClients(Modes.sbsos, msg, p - msg);
 }
+#endif
