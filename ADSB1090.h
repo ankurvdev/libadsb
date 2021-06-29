@@ -1190,8 +1190,8 @@ AirCraftImpl& ADSB1090Handler::_interactiveReceiveData(Message* mm)
         {
             if (mm->mesub == 1 || mm->mesub == 2)
             {
-                a.speed = static_cast<int32_t>(mm->velocity);
-                a.track = static_cast<int32_t>(mm->heading);
+                a.speed = static_cast<uint32_t>(mm->velocity);
+                a.track = static_cast<uint32_t>(mm->heading);
             }
         }
     }
