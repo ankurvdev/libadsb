@@ -12,7 +12,7 @@ SUPPRESS_MSVC_STL_WARNINGS
 SUPPRESS_WARNINGS_END
 
 #include <string.h>
-using namespace std::chrono_literals;
+
 #define MODES_PREAMBLE_US 8 /* microseconds */
 
 #define MODES_FULL_LEN (MODES_PREAMBLE_US + Message::LongMessageBits)
@@ -156,7 +156,7 @@ struct ADSB1090Handler : RTLSDR::IDataHandler
     {
         while (!that->_stopRequested)
         {
-            std::this_thread::sleep_for(1000ms);
+            std::this_thread::sleep_for(std::chrono::milliseconds{1000});
         }
     }
 

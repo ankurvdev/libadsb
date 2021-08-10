@@ -1,8 +1,10 @@
 #pragma once
 #include "CommonMacros.h"
 
+SUPPRESS_WARNINGS_START
+SUPPRESS_MSVC_STL_WARNINGS
 #include <rtl-sdr.h>
-
+SUPPRESS_WARNINGS_END
 
 #include <condition_variable>
 #include <cstddef>

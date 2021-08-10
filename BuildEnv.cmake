@@ -1,5 +1,8 @@
 cmake_minimum_required(VERSION 3.19)
-set(CMAKE_CXX_STANDARD 20)
+include(GenerateExportHeader)
+#set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_VISIBILITY_PRESET hidden)
+set(CMAKE_VISIBILITY_INLINES_HIDDEN 1)
 set(BuildEnvCMAKE_LOCATION "${CMAKE_CURRENT_LIST_DIR}")
 if (UNIX AND NOT ANDROID)
     set(LINUX 1)
@@ -36,12 +39,11 @@ macro(_FixFlags name)
 endmacro()
 
 macro(EnableStrictCompilation)
-    #find_package(Threads)
+    find_package(Threads)
     file(TIMESTAMP ${CMAKE_CURRENT_LIST_FILE} filetime)
 
     if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
         set(extraflags
-            #/showIncludes
             /Wall   # Enable all errors
             /WX     # All warnings as errors
             /await
@@ -52,6 +54,7 @@ macro(EnableStrictCompilation)
             /DWIN32_LEAN_AND_MEAN
             /bigobj
             /guard:cf
+            /std:c++latest
             /Zc:__cplusplus
             #suppression list
             /wd4068  # unknown pragma
@@ -65,6 +68,7 @@ macro(EnableStrictCompilation)
         )
 
         set(exclusions "[-/]W[a-zA-Z1-9]+" "[-/]permissive?")
+        link_libraries(WindowsApp.lib rpcrt4.lib onecoreuap.lib kernel32.lib)
 
         _FixFlags(CMAKE_C_FLAGS     EXCLUDE ${exclusions} APPEND ${extraflags})
         _FixFlags(CMAKE_CXX_FLAGS   EXCLUDE ${exclusions} APPEND ${extraflags})
@@ -73,6 +77,10 @@ macro(EnableStrictCompilation)
     elseif(("${CMAKE_CXX_COMPILER_ID}" STREQUAL Clang) OR ("${CMAKE_CXX_COMPILER_ID}" STREQUAL GNU))
         set(extraflags
             -g
+            -fPIC
+            -Wl,--exclude-libs,ALL
+            -Wno-unused-command-line-argument
+            -fvisibility=hidden
             -Wall   # Enable all errors
             -Werror     # All warnings as errors
             -Wextra
@@ -80,11 +88,16 @@ macro(EnableStrictCompilation)
             -pedantic-errors
             -pthread
         )
+        set(extracxxflags
+            -std=c++20
+            -fvisibility-inlines-hidden
+        )
         if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL Clang)
             list(APPEND extraflags -Weverything)
         endif()
-        list(APPEND extraflags
+        list(APPEND extracxxflags
             #suppression list
+            -Wno-ctad-maybe-unsupported
             -Wno-unknown-argument
             -Wno-unknown-pragmas
             -Wno-unknown-warning
@@ -102,7 +115,7 @@ macro(EnableStrictCompilation)
 
         set(exclusions "[-/]W[a-zA-Z1-9]+")
         _FixFlags(CMAKE_C_FLAGS     EXCLUDE ${exclusions} APPEND ${extraflags})
-        _FixFlags(CMAKE_CXX_FLAGS   EXCLUDE ${exclusions} APPEND ${extraflags})
+        _FixFlags(CMAKE_CXX_FLAGS   EXCLUDE ${exclusions} APPEND ${extraflags} ${extracxxflags})
         #message(FATAL_ERROR "Unknown compiler : ${CMAKE_CXX_COMPILER_ID}")
     else()
         message(STATUS "CMAKE_C_FLAGS_INIT             : ${CMAKE_C_FLAGS_INIT}")
@@ -125,6 +138,9 @@ macro(EnableStrictCompilation)
         endif()
     endif()
     set(STRICT_COMPILATION_MODE ${filetime} CACHE INTERNAL "Is Strict Compilation mode enabled" FORCE)
+    if (EXISTS ${BuildEnvCMAKE_LOCATION}/CommonMacros.h)
+        include_directories(${BuildEnvCMAKE_LOCATION})
+    endif()
 endmacro()
 
 macro (SupressWarningForFile f)

@@ -12,7 +12,9 @@ std::shared_ptr<TrafficManager>& GetThreadLocalTrafficManager();
 
 std::shared_ptr<TrafficManager>& GetThreadLocalTrafficManager()
 {
+    SUPPRESS_WARNINGS_START
     static thread_local std::shared_ptr<TrafficManager> manager;
+    SUPPRESS_WARNINGS_END
     return manager;
 }
 
@@ -40,7 +42,7 @@ struct UAT978Handler : RTLSDR::IDataHandler
                 _buffer[i] = _iqphase[data[j]];
             }
 
-            auto bufferProcessed = process_buffer(_buffer, i, _offset);
+            unsigned bufferProcessed = static_cast<unsigned>(process_buffer(_buffer, i, _offset));
             _offset += bufferProcessed;
             // Move the rest of the buffer to the start
             memmove(_buffer, _buffer + bufferProcessed, i - bufferProcessed);
