@@ -127,7 +127,7 @@ struct RTLSDR
         size_t bufferToUse = 0;
         while (!_stopRequested)
         {
-            _testDataIFS.read(reinterpret_cast<char*>(buffers[bufferToUse].data()), _config.bufferLength);
+            _testDataIFS.read(reinterpret_cast<char*>(buffers[bufferToUse].data()), static_cast<std::streamsize>(_config.bufferLength));
             if (!_testDataIFS.good())
             {
                 _testDataIFS.close();

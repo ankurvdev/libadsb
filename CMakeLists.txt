@@ -59,7 +59,7 @@ if (FALSE)
 endif()
 
 set(dump978_ROOT dump978)
-add_library(dump978 OBJECT 
+add_library(dump978 STATIC
     ${dump978_ROOT}/uat_decode.c
     ${dump978_ROOT}/dump978.c
     ${dump978_ROOT}/fec.c
