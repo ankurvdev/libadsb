@@ -66,6 +66,7 @@ add_library(dump978 STATIC
     ${dump978_ROOT}/fec.c
     ${dump978_ROOT}/fec/decode_rs_char.c
     ${dump978_ROOT}/fec/init_rs_char.c
+    uat2json-wrapper.cpp
 )
 SupressWarningForTarget(dump978)
 target_compile_definitions(dump978 PRIVATE main=dump978_main1 _USE_MATH_DEFINES)
@@ -74,7 +75,7 @@ if (MSVC)
 endif()
 target_link_libraries(dump978 PRIVATE rtlsdr::rtlsdr_static)
 
-add_library(adsb STATIC ADSBListener.h ADSBListener.cpp ADSB1090.h uat2json-wrapper.cpp)
+add_library(adsb STATIC ADSBListener.h ADSBListener.cpp ADSB1090.h)
 target_link_libraries(adsb PUBLIC dump978 rtlsdr::rtlsdr_static Threads::Threads)
 target_include_directories(adsb PUBLIC .)
 
