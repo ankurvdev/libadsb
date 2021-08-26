@@ -17,8 +17,6 @@ SUPPRESS_WARNINGS_END
 #include <vector>
 #define M_PI 3.14159265358979323846
 
-using namespace std::chrono_literals;
-
 struct RTLSDR
 {
     using time_point = std::chrono::time_point<std::chrono::system_clock>;
@@ -78,7 +76,7 @@ struct RTLSDR
     static constexpr uint32_t InvalidDeviceIndex = std::numeric_limits<uint32_t>::max();
 
     RTLSDR(IDeviceSelector const* const selector, uint32_t deviceIndex, Config const& config) :
-        _config(config), _deviceIndex(deviceIndex), _selector(selector)
+            _selector(selector),  _deviceIndex(deviceIndex),  _config(config)
     {
         _sizeMask = _config.bufferCount - 1;
         if ((_config.bufferCount & _sizeMask) != 0)
@@ -138,9 +136,15 @@ struct RTLSDR
 
     void _WaitForValidDevice()
     {
+        if (_dev) rtlsdr_close(_dev);
+        _dev = nullptr;
+        if (_selector != nullptr)
+        {
+            _deviceIndex = InvalidDeviceIndex;
+        }
         while (!_stopRequested && _deviceIndex == InvalidDeviceIndex)
         {
-            std::this_thread::sleep_for(2s);
+            std::this_thread::sleep_for(std::chrono::seconds(2));
             for (auto const& d : RTLSDR::GetAllDevices())
             {
                 if (_selector->SelectDevice(d)) try
@@ -148,7 +152,7 @@ struct RTLSDR
                         _deviceIndex = d.index;
                         break;
                     }
-                    catch (std::exception const& ex)
+                    catch (std::exception const& /*ex*/)
                     {
                         // Skip and try again
                     }
@@ -195,7 +199,6 @@ struct RTLSDR
     void Start(IDataHandler* handler)
     {
         Stop();
-        _WaitForValidDevice();
         _handler = handler;
         _started = true;
         if (_useTestDataFile)
@@ -205,7 +208,13 @@ struct RTLSDR
         else
         {
             _producerThrd = std::thread(
-                [this]() { rtlsdr_read_async(_dev, _Callback, this, _config.bufferCount, _config.bufferCount * _config.bufferLength); });
+                [this]() {
+                    do {
+                        _WaitForValidDevice();
+                        rtlsdr_read_async(_dev, _Callback, this, _config.bufferCount,
+                                          _config.bufferCount * _config.bufferLength);
+                    } while(!_stopRequested);
+                });
         }
         _consumerThrd = std::thread([this]() { this->_ConsumerThreadLoop(); });
     }
@@ -227,12 +236,6 @@ struct RTLSDR
         _producerThrd.join();
         _consumerThrd.join();
         _stopRequested = false;
-        if (_dev) rtlsdr_close(_dev);
-        _dev = nullptr;
-        if (_selector != nullptr)
-        {
-            _deviceIndex = InvalidDeviceIndex;
-        }
     }
 
     bool _HasSlot(std::unique_lock<std::mutex> const& /*lock*/) const { return ((_tail + 1) & _sizeMask) != _head; }
