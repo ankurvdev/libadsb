@@ -17,6 +17,8 @@ SUPPRESS_WARNINGS_END
 #include <vector>
 #define M_PI 3.14159265358979323846
 
+using namespace std::chrono_literals;
+
 struct RTLSDR
 {
     using time_point = std::chrono::time_point<std::chrono::system_clock>;
@@ -53,6 +55,12 @@ struct RTLSDR
         char     serial[256];
     };
 
+    struct IDeviceSelector
+    {
+        virtual ~IDeviceSelector()                           = default;
+        virtual bool SelectDevice(DeviceInfo const& d) const = 0;
+    };
+
     static std::vector<DeviceInfo> GetAllDevices()
     {
         auto                    deviceCount = rtlsdr_get_device_count();
@@ -67,7 +75,10 @@ struct RTLSDR
         return devices;
     }
 
-    RTLSDR(uint32_t deviceIndex, Config const& config) : _config(config)
+    static constexpr uint32_t InvalidDeviceIndex = std::numeric_limits<uint32_t>::max();
+
+    RTLSDR(IDeviceSelector const* const selector, uint32_t deviceIndex, Config const& config) :
+        _config(config), _deviceIndex(deviceIndex), _selector(selector)
     {
         _sizeMask = _config.bufferCount - 1;
         if ((_config.bufferCount & _sizeMask) != 0)
@@ -83,7 +94,23 @@ struct RTLSDR
             _useTestDataFile = true;
             return;
         }
+        if (_deviceIndex != InvalidDeviceIndex)
+        {
+            _OpenDevice(_deviceIndex);
+        }
+        else if (_selector == nullptr)
+        {
+            throw std::invalid_argument("Either a device index or a selector required");
+        }
+    }
 
+    RTLSDR(uint32_t deviceIndex, Config const& config) : RTLSDR(nullptr, deviceIndex, config) {}
+    RTLSDR(IDeviceSelector const* const selector, Config const& config) : RTLSDR(selector, InvalidDeviceIndex, config) {}
+
+    CLASS_DELETE_COPY_AND_MOVE(RTLSDR);
+
+    void _OpenDevice(uint32_t deviceIndex)
+    {
         if (rtlsdr_open(&_dev, deviceIndex) < 0) throw std::runtime_error("No supported RTLSDR devices found");
 
         /* Set gain, frequency, sample rate, and reset the device. */
@@ -104,13 +131,34 @@ struct RTLSDR
         rtlsdr_set_freq_correction(_dev, CorrectionPPM);
         rtlsdr_set_agc_mode(_dev, _config.enableAGC);
         rtlsdr_set_center_freq(_dev, _config.frequency);
-        rtlsdr_set_sample_rate(_dev, config.sampleRate);
+        rtlsdr_set_sample_rate(_dev, _config.sampleRate);
         rtlsdr_reset_buffer(_dev);
         _currentGain = rtlsdr_get_tuner_gain(_dev) / 10;
-
     }
 
-    CLASS_DELETE_COPY_AND_MOVE(RTLSDR);
+    void _WaitForValidDevice()
+    {
+        while (!_stopRequested && _deviceIndex == InvalidDeviceIndex)
+        {
+            std::this_thread::sleep_for(2s);
+            for (auto const& d : RTLSDR::GetAllDevices())
+            {
+                if (_selector->SelectDevice(d)) try
+                    {
+                        _deviceIndex = d.index;
+                        break;
+                    }
+                    catch (std::exception const& ex)
+                    {
+                        // Skip and try again
+                    }
+            }
+        }
+        if (_dev == nullptr)
+        {
+            _OpenDevice(_deviceIndex);
+        }
+    }
 
     void _TestDataReadLoop()
     {
@@ -147,6 +195,7 @@ struct RTLSDR
     void Start(IDataHandler* handler)
     {
         Stop();
+        _WaitForValidDevice();
         _handler = handler;
         _started = true;
         if (_useTestDataFile)
@@ -178,6 +227,12 @@ struct RTLSDR
         _producerThrd.join();
         _consumerThrd.join();
         _stopRequested = false;
+        if (_dev) rtlsdr_close(_dev);
+        _dev = nullptr;
+        if (_selector != nullptr)
+        {
+            _deviceIndex = InvalidDeviceIndex;
+        }
     }
 
     bool _HasSlot(std::unique_lock<std::mutex> const& /*lock*/) const { return ((_tail + 1) & _sizeMask) != _head; }
@@ -226,11 +281,7 @@ struct RTLSDR
         }
     }
 
-    ~RTLSDR()
-    {
-        Stop();
-        if (_dev) rtlsdr_close(_dev);
-    }
+    ~RTLSDR() { Stop(); }
 
     private:
     static void _Callback(uint8_t* buf, uint32_t len, void* ctx) noexcept
@@ -246,6 +297,10 @@ struct RTLSDR
     }
 
     int _currentGain{};
+
+    IDeviceSelector const* const _selector{};
+
+    uint32_t _deviceIndex{InvalidDeviceIndex};
 
     Config        _config{};
     rtlsdr_dev_t* _dev{nullptr};

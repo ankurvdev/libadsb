@@ -19,10 +19,6 @@ struct ADSBDataProviderImpl : ADSB::IDataProvider
     {
         _handler978  = UAT978Handler::TryCreate(_trafficManager);
         _handler1090 = ADSB1090Handler::TryCreate(_trafficManager);
-        if (_handler1090 == nullptr && _handler978 == nullptr)
-        {
-            throw std::runtime_error("Cannot find USB Device for 1090Mhz or 978Mhz");
-        }
     }
 
     virtual void Start(ADSB::IListener& listener) override

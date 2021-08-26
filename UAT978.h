@@ -18,10 +18,10 @@ std::shared_ptr<TrafficManager>& GetThreadLocalTrafficManager()
     return manager;
 }
 
-struct UAT978Handler : RTLSDR::IDataHandler
+struct UAT978Handler : RTLSDR::IDataHandler, RTLSDR::IDeviceSelector
 {
-    UAT978Handler(std::shared_ptr<TrafficManager> trafficManager, uint32_t index978) :
-        _trafficManager(trafficManager), _listener978{index978, RTLSDR::Config{.gain = 48, .frequency = 978000000, .sampleRate = 2083334}}
+    UAT978Handler(std::shared_ptr<TrafficManager> trafficManager) :
+        _trafficManager(trafficManager), _listener978{this, RTLSDR::Config{.gain = 48, .frequency = 978000000, .sampleRate = 2083334}}
     {
     }
 
@@ -48,6 +48,11 @@ struct UAT978Handler : RTLSDR::IDataHandler
             memmove(_buffer, _buffer + bufferProcessed, i - bufferProcessed);
             _used = i - bufferProcessed;
         }
+    }
+
+    virtual bool SelectDevice(RTLSDR::DeviceInfo const& d) const override
+    {
+        return std::string_view(d.serial).find("978") != std::string_view::npos;
     }
 
     void Start(ADSB::IListener& /*listener*/)
@@ -93,19 +98,6 @@ struct UAT978Handler : RTLSDR::IDataHandler
 
     static std::unique_ptr<UAT978Handler> TryCreate(std::shared_ptr<TrafficManager> trafficManager)
     {
-        auto devices = RTLSDR::GetAllDevices();
-        auto fs      = std::filesystem::absolute("978000000.test.dat");
-        if (std::filesystem::exists(fs))
-        {
-            return std::make_unique<UAT978Handler>(trafficManager, 0u);
-        }
-        for (auto& d : devices)
-        {
-            if (std::string_view(d.serial).find("978") != std::string_view::npos)
-            {
-                return std::make_unique<UAT978Handler>(trafficManager, d.index);
-            }
-        }
-        return {};
+        return std::make_unique<UAT978Handler>(trafficManager);
     }
 };

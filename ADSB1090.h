@@ -85,7 +85,7 @@ struct Message
     int altitude, unit;
 };
 
-struct ADSB1090Handler : RTLSDR::IDataHandler
+struct ADSB1090Handler : RTLSDR::IDataHandler, RTLSDR::IDeviceSelector
 {
     static constexpr size_t PreambleUS = 8; /*microseconds*/
 
@@ -123,12 +123,17 @@ struct ADSB1090Handler : RTLSDR::IDataHandler
         return lut;
     }
 
-    ADSB1090Handler(std::shared_ptr<TrafficManager> trafficManager, uint32_t index1090) :
-        _trafficManager(trafficManager), _listener1090{index1090, RTLSDR::Config{.frequency = 1090000000, .sampleRate = 2000000}}
+    ADSB1090Handler(std::shared_ptr<TrafficManager> trafficManager) :
+        _trafficManager(trafficManager), _listener1090{this, RTLSDR::Config{.frequency = 1090000000, .sampleRate = 2000000}}
     {
         std::cout << "ADSB Tracker Initializing" << std::endl;
     }
     CLASS_DELETE_COPY_AND_MOVE(ADSB1090Handler);
+
+    virtual bool SelectDevice(RTLSDR::DeviceInfo const& d) const override
+    {
+        return std::string_view(d.serial).find("1090") != std::string_view::npos;
+    }
 
     virtual void HandleData(std::span<uint8_t const> const& data) override
     {
@@ -186,19 +191,7 @@ struct ADSB1090Handler : RTLSDR::IDataHandler
 
     static std::unique_ptr<ADSB1090Handler> TryCreate(std::shared_ptr<TrafficManager> trafficManager)
     {
-        auto devices = RTLSDR::GetAllDevices();
-        if (std::filesystem::exists("1090000000.test.dat"))
-        {
-            return std::make_unique<ADSB1090Handler>(trafficManager, 0u);
-        }
-        for (auto& d : devices)
-        {
-            if (std::string_view(d.serial).find("1090") != std::string_view::npos)
-            {
-                return std::make_unique<ADSB1090Handler>(trafficManager, d.index);
-            }
-        }
-        return {};
+        return std::make_unique<ADSB1090Handler>(trafficManager);
     }
 
     std::unordered_map<uint32_t, std::chrono::system_clock::time_point> _icaoTimestamps;
