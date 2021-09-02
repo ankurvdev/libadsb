@@ -85,7 +85,7 @@ struct Message
     int altitude, unit;
 };
 
-struct ADSB1090Handler : RTLSDR::IDataHandler, RTLSDR::IDeviceSelector
+struct ADSB1090Handler : RTLSDR::IDataHandler
 {
     static constexpr size_t PreambleUS = 8; /*microseconds*/
 
@@ -109,6 +109,13 @@ struct ADSB1090Handler : RTLSDR::IDataHandler, RTLSDR::IDeviceSelector
         bool aggressive  = 0;
         bool loop        = 0;
     };
+    struct DeviceSelector : RTLSDR::IDeviceSelector
+    {
+        virtual bool SelectDevice(RTLSDR::DeviceInfo const& d) const override
+        {
+            return std::string_view(d.serial).find("1090") != std::string_view::npos;
+        }
+    };
 
     static std::vector<uint16_t> _CreateLUT()
     {
@@ -124,16 +131,11 @@ struct ADSB1090Handler : RTLSDR::IDataHandler, RTLSDR::IDeviceSelector
     }
 
     ADSB1090Handler(std::shared_ptr<TrafficManager> trafficManager) :
-        _trafficManager(trafficManager), _listener1090{this, RTLSDR::Config{.frequency = 1090000000, .sampleRate = 2000000}}
+        _trafficManager(trafficManager), _listener1090{&_selector, RTLSDR::Config{.frequency = 1090000000, .sampleRate = 2000000}}
     {
         std::cout << "ADSB Tracker Initializing" << std::endl;
     }
     CLASS_DELETE_COPY_AND_MOVE(ADSB1090Handler);
-
-    virtual bool SelectDevice(RTLSDR::DeviceInfo const& d) const override
-    {
-        return std::string_view(d.serial).find("1090") != std::string_view::npos;
-    }
 
     virtual void HandleData(std::span<uint8_t const> const& data) override
     {
@@ -207,6 +209,7 @@ struct ADSB1090Handler : RTLSDR::IDataHandler, RTLSDR::IDeviceSelector
     std::mutex        _mutex;
     std::thread       _thrd;
     std::atomic<bool> _stopRequested{false};
+    DeviceSelector    _selector;
     RTLSDR            _listener1090;
     /* Statistics */
     long long _stat_valid_preamble{};

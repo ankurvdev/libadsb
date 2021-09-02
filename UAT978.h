@@ -18,10 +18,18 @@ std::shared_ptr<TrafficManager>& GetThreadLocalTrafficManager()
     return manager;
 }
 
-struct UAT978Handler : RTLSDR::IDataHandler, RTLSDR::IDeviceSelector
+struct UAT978Handler : RTLSDR::IDataHandler
 {
+    struct DeviceSelector : RTLSDR::IDeviceSelector
+    {
+        virtual bool SelectDevice(RTLSDR::DeviceInfo const& d) const override
+        {
+            return std::string_view(d.serial).find("978") != std::string_view::npos;
+        }
+    };
+
     UAT978Handler(std::shared_ptr<TrafficManager> trafficManager) :
-        _trafficManager(trafficManager), _listener978{this, RTLSDR::Config{.gain = 48, .frequency = 978000000, .sampleRate = 2083334}}
+        _trafficManager(trafficManager), _listener978{&_selector, RTLSDR::Config{.gain = 48, .frequency = 978000000, .sampleRate = 2083334}}
     {
     }
 
@@ -48,11 +56,6 @@ struct UAT978Handler : RTLSDR::IDataHandler, RTLSDR::IDeviceSelector
             memmove(_buffer, _buffer + bufferProcessed, i - bufferProcessed);
             _used = i - bufferProcessed;
         }
-    }
-
-    virtual bool SelectDevice(RTLSDR::DeviceInfo const& d) const override
-    {
-        return std::string_view(d.serial).find("978") != std::string_view::npos;
     }
 
     void Start(ADSB::IListener& /*listener*/)
@@ -90,6 +93,7 @@ struct UAT978Handler : RTLSDR::IDataHandler, RTLSDR::IDeviceSelector
     }
 
     std::shared_ptr<TrafficManager> _trafficManager;
+    DeviceSelector                  _selector;
     RTLSDR                          _listener978;
     size_t                          _used   = 0;
     uint64_t                        _offset = 0;
