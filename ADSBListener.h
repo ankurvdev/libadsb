@@ -15,6 +15,7 @@ struct IAirCraft
     using time_point = std::chrono::time_point<std::chrono::system_clock>;
 
     virtual ~IAirCraft()                          = default;
+    virtual uint8_t          SourceId() const     = 0;
     virtual uint32_t         MessageCount() const = 0;
     virtual uint32_t         Addr() const         = 0;
     virtual std::string_view FlightNumber() const = 0;

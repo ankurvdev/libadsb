@@ -1146,7 +1146,7 @@ AirCraftImpl& ADSB1090Handler::_interactiveReceiveData(Message* mm)
     locctx.set_seen(now);
     // a.set_messageCount(int32_t{a.messageCount() + 1});
 #endif
-
+    a.sourceId = 1u;
     if (mm->msgtype == 0 || mm->msgtype == 4 || mm->msgtype == 20)
     {
         a.altitude = (static_cast<int32_t>(mm->altitude));

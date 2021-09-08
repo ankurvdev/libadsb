@@ -6,7 +6,7 @@
 struct AirCraftImpl : ADSB::IAirCraft
 {
     AirCraftImpl() = default;
-
+    virtual uint8_t          SourceId() const override { return sourceId; }
     virtual uint32_t         MessageCount() const override { return 0; }
     virtual uint32_t         Addr() const override { return addr; }
     virtual std::string_view FlightNumber() const override { return callsign; }
@@ -40,6 +40,8 @@ struct AirCraftImpl : ADSB::IAirCraft
     double     cpr_even_lat{};
     double     cpr_even_lon{};
     time_point cpr_even_time{};
+
+    uint8_t sourceId{};
 };
 
 struct TrafficManager : std::enable_shared_from_this<TrafficManager>
