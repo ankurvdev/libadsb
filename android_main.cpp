@@ -47,14 +47,14 @@ struct ADSBTrackerImpl : ADSB::IListener
     std::mutex _mutex;
 };
 
-ADSBTrackerImpl*                 ptr;
+ADSBTrackerImpl*                    ptr;
 extern "C" void TESTADSB_APP_EXPORT app_start(size_t count, ...)
 {
 #if defined __ANDROID__
     va_list args;
     va_start(args, count);
-    JavaVM *vm;
-    auto env = va_arg(args, JNIEnv*);    // first int
+    JavaVM* vm;
+    auto    env = va_arg(args, JNIEnv*);    // first int
     env->GetJavaVM(&vm);
     libusb_set_option(0, LIBUSB_OPTION_ANDROID_JAVAVM, vm, 0);
     libusb_set_option(0, LIBUSB_OPTION_ANDROID_JNIENV, env, 0);

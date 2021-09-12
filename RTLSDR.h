@@ -76,7 +76,7 @@ struct RTLSDR
     static constexpr uint32_t InvalidDeviceIndex = std::numeric_limits<uint32_t>::max();
 
     RTLSDR(IDeviceSelector const* const selector, uint32_t deviceIndex, Config const& config) :
-            _selector(selector),  _deviceIndex(deviceIndex),  _config(config)
+        _selector(selector), _deviceIndex(deviceIndex), _config(config)
     {
         _sizeMask = _config.bufferCount - 1;
         if ((_config.bufferCount & _sizeMask) != 0)
@@ -208,12 +208,13 @@ struct RTLSDR
         else
         {
             _producerThrd = std::thread(
-                [this]() {
-                    do {
+                [this]()
+                {
+                    do
+                    {
                         _WaitForValidDevice();
-                        rtlsdr_read_async(_dev, _Callback, this, _config.bufferCount,
-                                          _config.bufferCount * _config.bufferLength);
-                    } while(!_stopRequested);
+                        rtlsdr_read_async(_dev, _Callback, this, _config.bufferCount, _config.bufferCount * _config.bufferLength);
+                    } while (!_stopRequested);
                 });
         }
         _consumerThrd = std::thread([this]() { this->_ConsumerThreadLoop(); });
