@@ -167,9 +167,10 @@ macro (SupressWarningForTarget targetName)
 endmacro()
 
 function(init_submodule path)
-    if (EXISTS  "${path}/.git")
+    if (EXISTS  "${CMAKE_CURRENT_SOURCE_DIR}/${path}")
         return()
     endif()
+    message(STATUS "Submodule Update: ${CMAKE_CURRENT_SOURCE_DIR}/${path}")
     find_package(Git QUIET REQUIRED)
     execute_process(
         COMMAND "${GIT_EXECUTABLE}" submodule update --init --recursive --single-branch "${path}"
