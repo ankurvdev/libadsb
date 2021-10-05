@@ -158,7 +158,7 @@ struct RTLSDR
                     }
             }
         }
-        if (_dev == nullptr)
+        if (_dev == nullptr && _deviceIndex != InvalidDeviceIndex)
         {
             _OpenDevice(_deviceIndex);
         }
@@ -234,8 +234,8 @@ struct RTLSDR
 
         _cvDataConsumed.notify_one();
         _cvDataAvailable.notify_one();
-        _producerThrd.join();
-        _consumerThrd.join();
+        if (_producerThrd.joinable()) _producerThrd.join();
+        if (_consumerThrd.joinable()) _consumerThrd.join();
         _stopRequested = false;
     }
 
@@ -247,7 +247,7 @@ struct RTLSDR
         std::unique_lock lock(_mutex);
         if (!_HasSlot(lock))
         {
-            _cvDataConsumed.wait(lock, [&, this]() { return _HasSlot(lock); });
+            _cvDataConsumed.wait(lock, [&, this]() { return _HasSlot(lock) || _stopRequested; });
             if (_stopRequested) return;
         }
 
@@ -270,7 +270,7 @@ struct RTLSDR
                 std::unique_lock lock(_mutex);
                 if (_IsEmpty(lock))
                 {
-                    _cvDataAvailable.wait(lock, [&, this]() { return !_IsEmpty(lock); });
+                    _cvDataAvailable.wait(lock, [&, this]() { return !_IsEmpty(lock) || _stopRequested; });
                     continue;
                 }
             }
