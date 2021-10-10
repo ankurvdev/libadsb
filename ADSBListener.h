@@ -43,5 +43,5 @@ struct IDataProvider
     virtual void Stop()                     = 0;
 };
 
-std::unique_ptr<IDataProvider> CreateDump1090Provider(std::string_view const& deviceName);
+std::unique_ptr<IDataProvider> CreateDump1090Provider();
 }    // namespace ADSB

@@ -39,7 +39,7 @@ struct ADSBDataProviderImpl : ADSB::IDataProvider
     std::unique_ptr<ADSB1090Handler> _handler1090;
 };
 
-std::unique_ptr<ADSB::IDataProvider> ADSB::CreateDump1090Provider(std::string_view const& /*deviceName*/)
+std::unique_ptr<ADSB::IDataProvider> ADSB::CreateDump1090Provider()
 {
     return std::make_unique<ADSBDataProviderImpl>();
 }
