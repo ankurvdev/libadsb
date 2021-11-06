@@ -54,7 +54,7 @@ macro(EnableStrictCompilation)
             /DWIN32_LEAN_AND_MEAN
             /bigobj
             /guard:cf
-            /std:c++latest
+            /std:c++20
             /Zc:__cplusplus
             #suppression list
             /wd4068  # unknown pragma
@@ -65,6 +65,8 @@ macro(EnableStrictCompilation)
             /wd4710  # Function not inlined. VS2019 CRT throws this
             /wd4711  # Function selected for automatic inline. VS2019 CRT throws this
             /wd4738  # storing 32-bit float result in memory, possible loss of performance 10.0.19041.0\ucrt\corecrt_math.h(642)
+            # TODO : Revisit with later cmake release. This causes cmake autodetect HAVE_STRUCT_TIMESPEC to fail
+            /wd4255  # The compiler did not find an explicit list of arguments to a function. This warning is for the C compiler only.
         )
 
         set(exclusions "[-/]W[a-zA-Z1-9]+" "[-/]permissive?")
@@ -79,7 +81,6 @@ macro(EnableStrictCompilation)
             -g
             -fPIC
             -Wl,--exclude-libs,ALL
-            -Wno-unused-command-line-argument
             -fvisibility=hidden
             -Wall   # Enable all errors
             -Werror     # All warnings as errors
@@ -93,24 +94,30 @@ macro(EnableStrictCompilation)
             -fvisibility-inlines-hidden
         )
         if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL Clang)
-            list(APPEND extraflags -Weverything)
+            list(APPEND extraflags
+                -Weverything
+                -Wno-weak-vtables # Virtual Classes will actually be virtual
+                -Wno-return-std-move-in-c++11 # Rely on guaranteed copy ellisioning
+                -Wno-c++98-c++11-c++14-compat
+                -Wno-documentation-unknown-command
+                -Wno-covered-switch-default
+                -Wno-documentation
+                -Wno-unknown-warning-option
+                -Wno-unknown-warning
+                -Wno-unknown-argument
+                -Wno-c99-extensions
+                -Wno-unused-command-line-argument
+                -Wno-c++98-compat # Dont care about c++98 compatibility
+                -Wno-c++98-compat-pedantic
+                -Wno-reserved-identifier # Allow names starting with underscore
+                )
         endif()
+
         list(APPEND extracxxflags
             #suppression list
             -Wno-ctad-maybe-unsupported
-            -Wno-unknown-argument
             -Wno-unknown-pragmas
-            -Wno-unknown-warning
-            -Wno-unknown-warning-option
-            -Wno-documentation
-            -Wno-covered-switch-default
-            -Wno-documentation-unknown-command
-            -Wno-c++98-compat # Dont care about c++98 compatibility
-            -Wno-c++98-compat-pedantic
-            -Wno-c++98-c++11-c++14-compat
             -Wno-padded # Dont care about auto padding
-            -Wno-return-std-move-in-c++11 # Rely on guaranteed copy ellisioning
-            -Wno-weak-vtables # Virtual Classes will actually be virtual
         )
 
         set(exclusions "[-/]W[a-zA-Z1-9]+")
@@ -138,8 +145,8 @@ macro(EnableStrictCompilation)
         endif()
     endif()
     set(STRICT_COMPILATION_MODE ${filetime} CACHE INTERNAL "Is Strict Compilation mode enabled" FORCE)
-    if (EXISTS ${BuildEnvCMAKE_LOCATION}/CommonMacros.h)
-        include_directories(${BuildEnvCMAKE_LOCATION})
+    if (EXISTS ${BuildEnvCMAKE_LOCATION}/../include)
+        include_directories(${BuildEnvCMAKE_LOCATION}/../include)
     endif()
 endmacro()
 
@@ -166,15 +173,14 @@ macro (SupressWarningForTarget targetName)
     endif()
 endmacro()
 
-function(init_submodule path)
-    if (EXISTS  "${CMAKE_CURRENT_SOURCE_DIR}/${path}")
-        return()
+macro(init_submodule path)
+    if (NOT IS_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/${path}")
+        message(STATUS "Submodule Update: ${CMAKE_CURRENT_SOURCE_DIR}/${path}")
+        find_package(Git QUIET REQUIRED)
+        execute_process(
+            COMMAND "${GIT_EXECUTABLE}" submodule update --init --recursive --single-branch "${path}"
+            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+            COMMAND_ERROR_IS_FATAL ANY
+        )
     endif()
-    message(STATUS "Submodule Update: ${CMAKE_CURRENT_SOURCE_DIR}/${path}")
-    find_package(Git QUIET REQUIRED)
-    execute_process(
-        COMMAND "${GIT_EXECUTABLE}" submodule update --init --recursive --single-branch "${path}"
-        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-        COMMAND_ERROR_IS_FATAL ANY
-    )
-endfunction()
+endmacro()
