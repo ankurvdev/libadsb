@@ -1,8 +1,12 @@
 #pragma once
 #include "AircraftImpl.h"
 #include "RTLSDR.h"
+
+
 SUPPRESS_WARNINGS_START
 SUPPRESS_MSVC_STL_WARNINGS
+#include <SetThreadName.h>
+
 #include <cmath>
 #include <future>
 #include <span>

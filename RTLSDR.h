@@ -3,6 +3,7 @@
 
 SUPPRESS_WARNINGS_START
 SUPPRESS_MSVC_STL_WARNINGS
+#include <SetThreadName.h>
 #include <rtl-sdr.h>
 SUPPRESS_WARNINGS_END
 
@@ -203,13 +204,20 @@ struct RTLSDR
         _started = true;
         if (_useTestDataFile)
         {
-            _producerThrd = std::thread([this]() { _TestDataReadLoop(); });
+            _producerThrd = std::thread(
+                [this]()
+                {
+                    SetThreadName("RTLSDR-TestDataFile-Reader");
+
+                    _TestDataReadLoop();
+                });
         }
         else
         {
             _producerThrd = std::thread(
                 [this]()
                 {
+                    SetThreadName("RTLSDR-Device-Reader");
                     do
                     {
                         _WaitForValidDevice();
@@ -217,7 +225,12 @@ struct RTLSDR
                     } while (!_stopRequested);
                 });
         }
-        _consumerThrd = std::thread([this]() { this->_ConsumerThreadLoop(); });
+        _consumerThrd = std::thread(
+            [this]()
+            {
+                SetThreadName("RTLSDR-Data-Processor");
+                this->_ConsumerThreadLoop();
+            });
     }
 
     void Stop()
