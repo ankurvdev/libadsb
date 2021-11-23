@@ -2,7 +2,6 @@
 #include "AircraftImpl.h"
 #include "RTLSDR.h"
 
-
 SUPPRESS_WARNINGS_START
 SUPPRESS_MSVC_STL_WARNINGS
 #include <SetThreadName.h>
@@ -1101,20 +1100,23 @@ static void decodeCPR(AirCraftImpl& a)
     if (a.cpr_even_time > a.cpr_odd_time)
     {
         /* Use even packet. */
-        int ni = cprNFunction(rlat0, 0);
-        int m  = static_cast<int>(floor((((lon0 * (cprNLFunction(rlat0) - 1)) - (lon1 * cprNLFunction(rlat0))) / 131072) + 0.5));
-        a.lon  = (cprDlonFunction(rlat0, 0) * (cprModFunction(m, ni) + lon0 / 131072));
-        a.lat  = (double{rlat0});
+        int ni   = cprNFunction(rlat0, 0);
+        int m    = static_cast<int>(floor((((lon0 * (cprNLFunction(rlat0) - 1)) - (lon1 * cprNLFunction(rlat0))) / 131072) + 0.5));
+        a.lon1E7 = static_cast<int32_t>(cprDlonFunction(rlat0, 0) * (cprModFunction(m, ni) + lon0 / 131072) * 10000000);
+        a.lat1E7 = static_cast<int32_t>(double{rlat0 * 10000000});
     }
     else
     {
         /* Use odd packet. */
-        int ni = cprNFunction(rlat1, 1);
-        int m  = static_cast<int>(floor((((lon0 * (cprNLFunction(rlat1) - 1)) - (lon1 * cprNLFunction(rlat1))) / 131072.0) + 0.5));
-        a.lon  = (cprDlonFunction(rlat1, 1) * (cprModFunction(m, ni) + lon1 / 131072));
-        a.lat  = (double{rlat1});
+        int ni   = cprNFunction(rlat1, 1);
+        int m    = static_cast<int>(floor((((lon0 * (cprNLFunction(rlat1) - 1)) - (lon1 * cprNLFunction(rlat1))) / 131072.0) + 0.5));
+        a.lon1E7 = static_cast<int32_t>(cprDlonFunction(rlat1, 1) * (cprModFunction(m, ni) + lon1 / 131072) * 10000000);
+        a.lat1E7 = static_cast<int32_t>(double{rlat1} * 10000000);
     }
-    if (a.lon > 180) a.lon -= 360;
+    if (a.lon1E7 > 180 * 10000000)
+    {
+        a.lon1E7 -= 3600000000;
+    }
 }
 
 /* Receive new messages and populate the interactive mode with more info. */

@@ -14,12 +14,13 @@
 
 struct ADSBDataProviderImpl : ADSB::IDataProvider
 {
-    CLASS_DELETE_COPY_AND_MOVE(ADSBDataProviderImpl);
     ADSBDataProviderImpl()
     {
         _handler978  = UAT978Handler::TryCreate(_trafficManager);
         _handler1090 = ADSB1090Handler::TryCreate(_trafficManager);
     }
+
+    CLASS_DELETE_COPY_AND_MOVE(ADSBDataProviderImpl);
 
     virtual void Start(ADSB::IListener& listener) override
     {
@@ -33,6 +34,8 @@ struct ADSBDataProviderImpl : ADSB::IDataProvider
         if (_handler978) _handler978->Stop();
         if (_handler1090) _handler1090->Stop();
     }
+
+    virtual void NotifySelfLocation(ADSB::IAirCraft const& /*selfLoc*/) override {}
 
     std::shared_ptr<TrafficManager>  _trafficManager = std::make_shared<TrafficManager>();
     std::unique_ptr<UAT978Handler>   _handler978;

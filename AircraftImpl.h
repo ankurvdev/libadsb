@@ -19,8 +19,8 @@ struct AirCraftImpl : ADSB::IAirCraft
     //    virtual int32_t Lat1E7() const override { return static_cast<int32_t>(((odd_time > even_time) ? odd_lat : even_lat) * 10000000.0);
     //    } virtual int32_t Lon1E7() const override { return static_cast<int32_t>(((odd_time > even_time) ? odd_lon : even_lon) *
     //    10000000.0); }
-    virtual int32_t Lat1E7() const override { return static_cast<int32_t>(lat * 10000000.0); }
-    virtual int32_t Lon1E7() const override { return static_cast<int32_t>(lon * 10000000.0); }
+    virtual int32_t Lat1E7() const override { return lat1E7; }
+    virtual int32_t Lon1E7() const override { return lon1E7; }
 
     uint32_t   addr{0};
     char       callsign[9]{};
@@ -30,8 +30,8 @@ struct AirCraftImpl : ADSB::IAirCraft
     uint32_t   speed{};
     uint32_t   track{};
     int32_t    vert_rate{};
-    double     lat{};
-    double     lon{};
+    int32_t    lat1E7{};
+    int32_t    lon1E7{};
 
     // Used for 1090 ADSB Decoding
     double     cpr_odd_lat{};

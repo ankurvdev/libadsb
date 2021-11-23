@@ -41,6 +41,8 @@ struct IDataProvider
 
     virtual void Start(IListener& listener) = 0;
     virtual void Stop()                     = 0;
+
+    virtual void NotifySelfLocation(IAirCraft const&) = 0;
 };
 
 std::unique_ptr<IDataProvider> CreateDump1090Provider();
