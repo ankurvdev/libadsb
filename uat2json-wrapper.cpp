@@ -63,8 +63,8 @@ void dump_raw_message(char /*updown*/, uint8_t* data, int /*len*/, int /*rs_erro
     {
         if (mdb.position_valid)
         {
-            aircraft.lat1E7 = mdb.lat * 10000000;
-            aircraft.lon1E7 = mdb.lon * 10000000;
+            aircraft.lat1E7 = static_cast<int32_t>(mdb.lat * 10000000);
+            aircraft.lon1E7 = static_cast<int32_t>(mdb.lon * 10000000);
         }
         if (mdb.speed_valid) aircraft.speed = mdb.speed;
         // if (mdb->ns_vel_valid) fprintf(to, " N/S velocity: %d kt\n", mdb->ns_vel);
