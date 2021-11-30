@@ -143,9 +143,17 @@ struct RTLSDR
         {
             _deviceIndex = InvalidDeviceIndex;
         }
+
+        using time_point = std::chrono::system_clock::time_point;
+        time_point nextrun{};
+
         while (!_stopRequested && _deviceIndex == InvalidDeviceIndex)
         {
-            std::this_thread::sleep_for(std::chrono::seconds(2));
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            auto now = time_point::clock::now();
+            if (now < nextrun) continue;
+            nextrun = now + std::chrono::seconds{2};
+
             for (auto const& d : RTLSDR::GetAllDevices())
             {
                 if (_selector->SelectDevice(d)) try

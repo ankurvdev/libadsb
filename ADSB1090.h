@@ -162,14 +162,6 @@ struct ADSB1090Handler : RTLSDR::IDataHandler
     void Start(ADSB::IListener& /*listener*/) { _listener1090.Start(this); }
     void Stop() { _listener1090.Stop(); }
 
-    static void ThreadFunc(ADSB1090Handler* that)
-    {
-        while (!that->_stopRequested)
-        {
-            std::this_thread::sleep_for(std::chrono::milliseconds{1000});
-        }
-    }
-
     /* Add the specified entry to the cache of recently seen ICAO addresses.
      * Note that we also add a timestamp so that we can make sure that the
      * entry is only valid for MODES_ICAO_CACHE_TTL seconds. */
