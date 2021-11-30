@@ -144,7 +144,6 @@ struct RTLSDR
             _deviceIndex = InvalidDeviceIndex;
         }
 
-        using time_point = std::chrono::system_clock::time_point;
         time_point nextrun{};
 
         while (!_stopRequested && _deviceIndex == InvalidDeviceIndex)
