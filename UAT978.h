@@ -31,6 +31,8 @@ struct UAT978Handler : RTLSDR::IDataHandler
     UAT978Handler(std::shared_ptr<TrafficManager> trafficManager) :
         _trafficManager(trafficManager), _listener978{&_selector, RTLSDR::Config{.gain = 48, .frequency = 978000000, .sampleRate = 2083334}}
     {
+        std::fill(std::begin(_buffer), std::end(_buffer), 0);
+        std::fill(std::begin(_iqphase), std::end(_iqphase), 0);
     }
 
     CLASS_DELETE_COPY_AND_MOVE(UAT978Handler);
@@ -50,7 +52,7 @@ struct UAT978Handler : RTLSDR::IDataHandler
                 _buffer[i] = _iqphase[data[j]];
             }
 
-            unsigned bufferProcessed = static_cast<unsigned>(process_buffer(_buffer, i, _offset));
+            int bufferProcessed = process_buffer(_buffer, i, _offset);
             _offset += bufferProcessed;
             // Move the rest of the buffer to the start
             memmove(_buffer, _buffer + bufferProcessed, i - bufferProcessed);

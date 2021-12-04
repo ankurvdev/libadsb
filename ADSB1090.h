@@ -1088,27 +1088,30 @@ static void decodeCPR(AirCraftImpl& a)
     /* Check that both are in the same latitude zone, or abort. */
     if (cprNLFunction(rlat0) != cprNLFunction(rlat1)) return;
 
+    double lat1E7, lon1E7;
     /* Compute ni and the longitude index m */
     if (a.cpr_even_time > a.cpr_odd_time)
     {
         /* Use even packet. */
         int ni   = cprNFunction(rlat0, 0);
         int m    = static_cast<int>(floor((((lon0 * (cprNLFunction(rlat0) - 1)) - (lon1 * cprNLFunction(rlat0))) / 131072) + 0.5));
-        a.lon1E7 = static_cast<int32_t>(cprDlonFunction(rlat0, 0) * (cprModFunction(m, ni) + lon0 / 131072) * 10000000);
-        a.lat1E7 = static_cast<int32_t>(double{rlat0 * 10000000});
+        lon1E7 = (cprDlonFunction(rlat0, 0) * (cprModFunction(m, ni) + lon0 / 131072) * 10000000);
+        lat1E7 = (double{rlat0 * 10000000});
     }
     else
     {
         /* Use odd packet. */
         int ni   = cprNFunction(rlat1, 1);
         int m    = static_cast<int>(floor((((lon0 * (cprNLFunction(rlat1) - 1)) - (lon1 * cprNLFunction(rlat1))) / 131072.0) + 0.5));
-        a.lon1E7 = static_cast<int32_t>(cprDlonFunction(rlat1, 1) * (cprModFunction(m, ni) + lon1 / 131072) * 10000000);
-        a.lat1E7 = static_cast<int32_t>(double{rlat1} * 10000000);
+        lon1E7 = (cprDlonFunction(rlat1, 1) * (cprModFunction(m, ni) + lon1 / 131072) * 10000000);
+        lat1E7 = (double{rlat1} * 10000000);
     }
-    if (a.lon1E7 > 180 * 10000000)
+    if (lon1E7 > 180 * 10000000)
     {
-        a.lon1E7 -= 3600000000;
+        lon1E7 -= 3600000000;
     }
+    a.lat1E7 = static_cast<int32_t>(lat1E7);
+    a.lon1E7 = static_cast<int32_t>(lon1E7);
 }
 
 /* Receive new messages and populate the interactive mode with more info. */
