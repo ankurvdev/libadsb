@@ -352,5 +352,4 @@ struct RTLSDR
     std::ifstream         _testDataIFS;
     std::filesystem::path _testDataFile;
     bool                  _useTestDataFile = false;
-    std::thread           _testDataThread;
 };
