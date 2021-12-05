@@ -31,8 +31,8 @@ struct UAT978Handler : RTLSDR::IDataHandler
     UAT978Handler(std::shared_ptr<TrafficManager> trafficManager) :
         _trafficManager(trafficManager), _listener978{&_selector, RTLSDR::Config{.gain = 48, .frequency = 978000000, .sampleRate = 2083334}}
     {
-        std::fill(std::begin(_buffer), std::end(_buffer), 0);
-        std::fill(std::begin(_iqphase), std::end(_iqphase), 0);
+        std::fill(std::begin(_buffer), std::end(_buffer), uint16_t{0u});
+        std::fill(std::begin(_iqphase), std::end(_iqphase), uint16_t{0u});
     }
 
     CLASS_DELETE_COPY_AND_MOVE(UAT978Handler);
