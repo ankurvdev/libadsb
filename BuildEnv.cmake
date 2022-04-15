@@ -7,7 +7,9 @@ set(BuildEnvCMAKE_LOCATION "${CMAKE_CURRENT_LIST_DIR}")
 if (UNIX AND NOT ANDROID)
     set(LINUX 1)
 endif()
-
+if (IS_DIRECTORY ${BuildEnvCMAKE_LOCATION}/../Format.cmake AND NOT SKIP_FORMAT)
+    add_subdirectory(${BuildEnvCMAKE_LOCATION}/../Format.cmake Format.cmake)
+endif()
 
 macro(_FixFlags name)
     cmake_parse_arguments("" "" "" "VALUE;EXCLUDE;APPEND" ${ARGN})
@@ -60,11 +62,13 @@ macro(EnableStrictCompilation)
             /wd4068  # unknown pragma
             /wd4514  # unreferenced inline function has been removed
             /wd4820  # bytes padding added after data member in struct
+            /wd5039  #  pointer or reference to potentially throwing function passed to 'extern "C"' function under -EHc.
             /wd5045  # Spectre mitigation insertion
             # TODO : Revisit these with newer VS Releases
             /wd4710  # Function not inlined. VS2019 CRT throws this
             /wd4711  # Function selected for automatic inline. VS2019 CRT throws this
             /wd4738  # storing 32-bit float result in memory, possible loss of performance 10.0.19041.0\ucrt\corecrt_math.h(642)
+            /wd4746  # volatile access of 'b' is subject to /volatile:<iso|ms>
             # TODO : Revisit with later cmake release. This causes cmake autodetect HAVE_STRUCT_TIMESPEC to fail
             /wd4255  # The compiler did not find an explicit list of arguments to a function. This warning is for the C compiler only.
         )
@@ -108,8 +112,10 @@ macro(EnableStrictCompilation)
                 -Wno-c99-extensions
                 -Wno-unused-command-line-argument
                 -Wno-c++98-compat # Dont care about c++98 compatibility
+                -Wno-c++20-compat
                 -Wno-c++98-compat-pedantic
                 -Wno-reserved-identifier # Allow names starting with underscore
+                -Wno-reserved-id-macro
                 )
         endif()
 
@@ -173,14 +179,25 @@ macro (SupressWarningForTarget targetName)
     endif()
 endmacro()
 
-macro(init_submodule path)
-    if (NOT IS_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/${path}")
-        message(STATUS "Submodule Update: ${CMAKE_CURRENT_SOURCE_DIR}/${path}")
-        find_package(Git QUIET REQUIRED)
-        execute_process(
-            COMMAND "${GIT_EXECUTABLE}" submodule update --init --recursive --single-branch "${path}"
-            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-            COMMAND_ERROR_IS_FATAL ANY
-        )
+function(init_submodule path)
+    cmake_parse_arguments("" "" "SUBDMODULE_DIRECTORY" "" ${ARGN})
+    set(srcdir "${CMAKE_CURRENT_SOURCE_DIR}")
+    if (DEFINED _SUBDMODULE_DIRECTORY)
+        set(srcdir "${_SUBDMODULE_DIRECTORY}")
+    elseif (DEFINED INIT_SUBMODULE_DIRECTORY)
+        set(srcdir ${INIT_SUBMODULE_DIRECTORY})
     endif()
-endmacro()
+    if ((IS_DIRECTORY "${srcdir}/${path}"))
+        file(GLOB files "${srcdir}/${path}/*")
+        if (NOT "${files}" STREQUAL "")
+            return()
+        endif()
+    endif()
+    message(STATUS "Submodule Update: ${srcdir}/${path}")
+    find_package(Git QUIET REQUIRED)
+    execute_process(
+        COMMAND "${GIT_EXECUTABLE}" submodule update --init --recursive --single-branch "${path}"
+        WORKING_DIRECTORY "${srcdir}"
+        COMMAND_ERROR_IS_FATAL ANY
+    )
+endfunction()

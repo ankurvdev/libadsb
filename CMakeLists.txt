@@ -1,11 +1,16 @@
 cmake_minimum_required(VERSION 3.19)
+include(${CMAKE_CURRENT_LIST_DIR}/BuildEnv.cmake)
+
 project(libadsb)
-include(./BuildEnv.cmake)
+
 include(CTest)
 include(GenerateExportHeader)
+set(CMAKE_CXX_STANDARD 20)
+
+EnableStrictCompilation()
 
 option(libadsb_BUILD_TESTING "Build Tests" ON)
-find_package(libusb QUIET)
+find_package(libusb CONFIG)
 if (NOT libusb_FOUND)
     init_submodule(libusb)
     set(libusb_BUILD_TESTING OFF CACHE BOOL "")
@@ -16,7 +21,7 @@ endif()
 if (NOT TARGET rtlsdr::rtlsdr_static)
     find_package(rtlsdr QUIET)
     if (NOT rtlsdr_FOUND)
-        init_submodule(rtl-sdr)
+        init_submodule(rtl-sdr SUBDMODULE_DIRECTORY ${CMAKE_CURRENT_LIST_DIR})
         set(rtlsdr_ROOT rtl-sdr/src)
         add_library(rtlsdr_static STATIC
             ${rtlsdr_ROOT}/librtlsdr.c
@@ -38,27 +43,25 @@ find_package(Threads REQUIRED)
 
 set(CMAKE_CXX_STANDARD 20)
 
-init_submodule(dump978)
+init_submodule(dump978 SUBDMODULE_DIRECTORY ${CMAKE_CURRENT_LIST_DIR})
+init_submodule(dump1090 SUBDMODULE_DIRECTORY ${CMAKE_CURRENT_LIST_DIR})
 
-if (FALSE)
-    init_submodule(dump1090)
-    file(GLOB dump1090sources dump1090/*.c)
+file(GLOB dump1090sources dump1090/*.c)
 
-    set(excludes
-        interactive.c #curses
-        sdr_limesdr.c #device not needed
-        sdr_bladerf.c #device not needed
-        sdr_hackrf.c #device not needed
-        dump1090.c # contains main
-        view1090.c # contains main
-        cprtests.c # tests
-        faup1090.c # contains main
-        net_io.c   # highjacking callbacks
-    )
-    foreach(ex ${excludes})
-        list(FILTER dump1090sources EXCLUDE REGEX "dump1090/${ex}")
-    endforeach()
-endif()
+set(excludes
+    interactive.c #curses
+    sdr_limesdr.c #device not needed
+    sdr_bladerf.c #device not needed
+    sdr_hackrf.c #device not needed
+    dump1090.c # contains main
+    view1090.c # contains main
+    cprtests.c # tests
+    faup1090.c # contains main
+    net_io.c   # highjacking callbacks
+)
+foreach(ex ${excludes})
+    list(FILTER dump1090sources EXCLUDE REGEX "dump1090/${ex}")
+endforeach()
 
 set(dump978_ROOT dump978)
 add_library(dump978 STATIC
@@ -83,8 +86,11 @@ target_include_directories(adsb PUBLIC .)
 if (libadsb_BUILD_TESTING AND BUILD_TESTING)
     add_executable(testadsb main.cpp)
     target_link_libraries(testadsb PRIVATE adsb)
-    add_library(testadsb_app SHARED android_main.cpp)
-    target_link_libraries(testadsb_app PRIVATE adsb usb-1.0)
-    generate_export_header(testadsb_app)
-    target_include_directories(testadsb_app PRIVATE ${PROJECT_BINARY_DIR})
+
+    if (DEFINED ANDROID)
+        add_library(testadsb_app SHARED android_main.cpp)
+        target_link_libraries(testadsb_app PRIVATE adsb usb-1.0)
+        generate_export_header(testadsb_app)
+        target_include_directories(testadsb_app PRIVATE ${PROJECT_BINARY_DIR})
+    endif()
 endif()

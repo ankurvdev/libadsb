@@ -23,7 +23,7 @@ struct ADSBTrackerImpl : ADSB::IListener
 {
     CLASS_DELETE_COPY_AND_MOVE(ADSBTrackerImpl);
 
-    ADSBTrackerImpl(std::string_view const& deviceName) : _dump1090Provider(ADSB::CreateDump1090Provider(deviceName))
+    ADSBTrackerImpl() : _dump1090Provider(ADSB::CreateDump1090Provider())
     {
         std::cout << "ADSB Tracker Initializing" << std::endl;
         _dump1090Provider->Start(*this);
@@ -43,7 +43,7 @@ struct ADSBTrackerImpl : ADSB::IListener
 
     std::vector<uint8_t> _data;
 
-    // DataRecorder<Avid::Aircraft::Data> _recorder;
+    // DataRecorder<Avid::Aircraft> _recorder;
     std::mutex _mutex;
 };
 
