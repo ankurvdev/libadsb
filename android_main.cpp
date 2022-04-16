@@ -8,8 +8,11 @@
 #include <thread>
 #include <unordered_map>
 #include <vector>
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Weverything"
 
 #include <libusb.h>
+#pragma clang diagnostic pop
 
 #if defined __ANDROID__
 #include <jni.h>
@@ -18,6 +21,15 @@
 extern "C" void TESTADSB_APP_EXPORT        app_start(size_t count, ...);
 extern "C" void TESTADSB_APP_EXPORT        app_stop(size_t count, ...);
 extern "C" const char* TESTADSB_APP_EXPORT get_webserver_url();
+extern "C" void TESTADSB_APP_EXPORT        android_update_location(JNIEnv* jniEnv, jobject thiz, jobject location);
+extern "C" void TESTADSB_APP_EXPORT        android_update_orientation(JNIEnv* jniEnv, jobject thiz, jint location);
+
+extern "C" void android_update_location(JNIEnv* /* jniEnv */, jobject /* thiz */, jobject /* location */)
+{
+}
+extern "C" void android_update_orientation(JNIEnv* /* jniEnv */, jobject /* thiz */, jint /* location */)
+{
+}
 
 struct ADSBTrackerImpl : ADSB::IListener
 {
@@ -47,7 +59,7 @@ struct ADSBTrackerImpl : ADSB::IListener
     std::mutex _mutex;
 };
 
-ADSBTrackerImpl*                    ptr;
+static ADSBTrackerImpl*             ptr = nullptr;
 extern "C" void TESTADSB_APP_EXPORT app_start(size_t count, ...)
 {
 #if defined __ANDROID__
@@ -56,11 +68,17 @@ extern "C" void TESTADSB_APP_EXPORT app_start(size_t count, ...)
     JavaVM* vm;
     auto    env = va_arg(args, JNIEnv*);    // first int
     env->GetJavaVM(&vm);
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Weverything"
+
     libusb_set_option(0, LIBUSB_OPTION_ANDROID_JAVAVM, vm, 0);
     libusb_set_option(0, LIBUSB_OPTION_ANDROID_JNIENV, env, 0);
+#pragma clang diagnostic pop
+
     va_end(args);
+
 #endif
-    ptr = new ADSBTrackerImpl("");
+    ptr = new ADSBTrackerImpl();
 }
 
 extern "C" void TESTADSB_APP_EXPORT app_stop(size_t /*count*/, ...)

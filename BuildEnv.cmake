@@ -78,8 +78,11 @@ macro(EnableStrictCompilation)
 
         _FixFlags(CMAKE_C_FLAGS     EXCLUDE ${exclusions} APPEND ${extraflags})
         _FixFlags(CMAKE_CXX_FLAGS   EXCLUDE ${exclusions} APPEND ${extraflags})
-        _FixFlags(CMAKE_C_FLAGS_DEBUG APPEND /RTCcsu)
-
+        # /RTCc rejects code that conforms to the standard, it's not supported by the C++ Standard Library
+        # RTCc Reports when a value is assigned to a smaller data type and results in a data loss. 
+        # RTCs Enables stack frame run-time error checking, as follows:
+        # RTCu Reports when a variable is used without having been initialized
+        _FixFlags(CMAKE_C_FLAGS_DEBUG APPEND /RTCsu) 
     elseif(("${CMAKE_CXX_COMPILER_ID}" STREQUAL Clang) OR ("${CMAKE_CXX_COMPILER_ID}" STREQUAL GNU))
         set(extraflags
             -g

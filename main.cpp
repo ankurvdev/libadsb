@@ -41,6 +41,10 @@ struct ADSBTrackerImpl : ADSB::IListener
 int main()
 {
     ADSBTrackerImpl tracker;
-    while (true) std::this_thread::sleep_for(10s);
+    do
+    {
+        std::cout << '\n' << "Press Enter to exit...";
+        std::this_thread::sleep_for(1s);
+    } while (std::cin.get() != '\n');
     return 0;
 }
