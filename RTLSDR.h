@@ -62,6 +62,11 @@ struct RTLSDR
 
     static std::vector<DeviceInfo> GetAllDevices()
     {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wexit-time-destructors"
+        static std::mutex _mutex;
+#pragma clang diagnostic pop
+        std::lock_guard<std::mutex> guard(_mutex);
         auto                    deviceCount = rtlsdr_get_device_count();
         std::vector<DeviceInfo> devices;
         devices.resize(deviceCount);
