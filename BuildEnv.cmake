@@ -148,7 +148,13 @@ macro(EnableStrictCompilation)
         endif()
 
         if (MINGW)
-            list(APPEND extraflags -O1 -Wa,-mbig-obj -DWIN32=1 -D_WINDOWS=1 -DWIN32_LEAN_AND_MEAN=1)
+            # TODO GCC Bug: Compiling with -O1 can sometimes result errors
+            # due to running out of string slots (file too big)
+            list(APPEND extraflags -O1)
+
+            list(APPEND extraflags -Wa,-mbig-obj)
+            list(APPEND extraflags -DWIN32=1 -D_WINDOWS=1 -DWIN32_LEAN_AND_MEAN=1)
+            list(APPEND extracxxflags -DNOMINMAX=1)
         endif()
 
         list(APPEND extracxxflags
