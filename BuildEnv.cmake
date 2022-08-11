@@ -3,12 +3,16 @@ include(GenerateExportHeader)
 #set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_VISIBILITY_PRESET hidden)
 set(CMAKE_VISIBILITY_INLINES_HIDDEN 1)
+set(CMAKE_C_USE_RESPONSE_FILE_FOR_INCLUDES   OFF)
+set(CMAKE_CXX_USE_RESPONSE_FILE_FOR_INCLUDES OFF)
 set(BuildEnvCMAKE_LOCATION "${CMAKE_CURRENT_LIST_DIR}")
 if (UNIX AND NOT ANDROID)
     set(LINUX 1)
 endif()
 if (IS_DIRECTORY ${BuildEnvCMAKE_LOCATION}/../Format.cmake AND NOT SKIP_FORMAT)
-    add_subdirectory(${BuildEnvCMAKE_LOCATION}/../Format.cmake Format.cmake)
+    if (NOT TARGET fix-clang-format)
+        add_subdirectory(${BuildEnvCMAKE_LOCATION}/../Format.cmake Format.cmake)
+    endif()
 endif()
 macro(_PrintFlags)
     message(STATUS "CMAKE_C_FLAGS_INIT             : ${CMAKE_C_FLAGS_INIT}")
@@ -86,6 +90,7 @@ macro(EnableStrictCompilation)
             /wd4746  # volatile access of 'b' is subject to /volatile:<iso|ms>
             # TODO : Revisit with later cmake release. This causes cmake autodetect HAVE_STRUCT_TIMESPEC to fail
             /wd4255  # The compiler did not find an explicit list of arguments to a function. This warning is for the C compiler only.
+	    /wd5246  # MSVC Bug VS2022 :  the initialization of a subobject should be wrapped in braces
         )
 
         set(exclusions "[-/]W[a-zA-Z1-9]+" "[-/]permissive?")
@@ -110,11 +115,16 @@ macro(EnableStrictCompilation)
             -pedantic
             -pedantic-errors
             -pthread
+            # Remove unused code
+            -ffunction-sections
+            -fdata-sections
+            -Wl,--gc-sections
         )
         set(extracxxflags
             -std=c++20
             -fvisibility-inlines-hidden
         )
+
         if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL Clang)
             list(APPEND extraflags
                 -Weverything
@@ -135,6 +145,10 @@ macro(EnableStrictCompilation)
                 -Wno-reserved-identifier # Allow names starting with underscore
                 -Wno-reserved-id-macro
                 )
+        endif()
+
+        if (MINGW)
+            list(APPEND extraflags -O1 -Wa,-mbig-obj -DWIN32=1 -D_WINDOWS=1 -DWIN32_LEAN_AND_MEAN=1)
         endif()
 
         list(APPEND extracxxflags
@@ -191,7 +205,7 @@ function(init_submodule path)
     if (DEFINED _SUBDMODULE_DIRECTORY)
         set(srcdir "${_SUBDMODULE_DIRECTORY}")
     elseif (DEFINED INIT_SUBMODULE_DIRECTORY)
-        set(srcdir ${INIT_SUBMODULE_DIRECTORY})
+        set(srcdir "${INIT_SUBMODULE_DIRECTORY}")
     endif()
     if ((IS_DIRECTORY "${srcdir}/${path}"))
         file(GLOB files "${srcdir}/${path}/*")
@@ -199,8 +213,8 @@ function(init_submodule path)
             return()
         endif()
     endif()
-    message(STATUS "Submodule Update: ${srcdir}/${path}")
     find_package(Git QUIET REQUIRED)
+    message(STATUS "Submodule Update: ${srcdir}/${path}")
     execute_process(
         COMMAND "${GIT_EXECUTABLE}" submodule update --init --recursive --single-branch "${path}"
         WORKING_DIRECTORY "${srcdir}"
