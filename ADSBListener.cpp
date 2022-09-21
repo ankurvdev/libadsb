@@ -1,12 +1,4 @@
 #include "ADSBListener.h"
-#include "CommonMacros.h"
-
-#include <fstream>
-#include <span>
-#include <stdexcept>
-#include <string_view>
-#include <thread>
-
 #include "ADSB1090.h"
 #include "AircraftImpl.h"
 #include "RTLSDR.h"

@@ -22,8 +22,8 @@
         _Pragma("warning(disable : 5026)") /* move constructor was implicitly defined as deleted*/                            \
         _Pragma("warning(disable : 5204)") /* class has virtual functions, but its trivial destructor is not virtual;*/       \
         _Pragma("warning(disable : 5246)") /* initialization of a subobject should be wrapped in braces */                    \
-        _Pragma("warning(disable : 5220)") /* a non-static data member with a volatile qualified type no longer implies*/
-
+        _Pragma("warning(disable : 5220)") /* a non-static data member with a volatile qualified type no longer implies*/     \
+        _Pragma("warning(disable : 5262)") /* Use [[fallthrough]] when break intentionally omitted */
 #endif
 
 #define SUPPRESS_STL_WARNINGS _Pragma("GCC diagnostic ignored \"-Wmaybe-uninitialized\"")

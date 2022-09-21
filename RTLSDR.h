@@ -5,6 +5,8 @@ SUPPRESS_WARNINGS_START
 SUPPRESS_MSVC_STL_WARNINGS
 #include <SetThreadName.h>
 #include <rtl-sdr.h>
+
+#include <fstream>
 SUPPRESS_WARNINGS_END
 
 #include <condition_variable>
@@ -16,6 +18,7 @@ SUPPRESS_WARNINGS_END
 #include <span>
 #include <thread>
 #include <vector>
+
 #define M_PI 3.14159265358979323846
 
 struct RTLSDR
@@ -67,8 +70,8 @@ struct RTLSDR
         static std::mutex _mutex;
 #pragma clang diagnostic pop
         std::lock_guard<std::mutex> guard(_mutex);
-        auto                    deviceCount = rtlsdr_get_device_count();
-        std::vector<DeviceInfo> devices;
+        auto                        deviceCount = rtlsdr_get_device_count();
+        std::vector<DeviceInfo>     devices;
         devices.resize(deviceCount);
         for (uint32_t i = 0; i < deviceCount; i++)
         {
@@ -108,8 +111,12 @@ struct RTLSDR
         }
     }
 
-    RTLSDR(uint32_t deviceIndex, Config const& config) : RTLSDR(nullptr, deviceIndex, config) {}
-    RTLSDR(IDeviceSelector const* const selector, Config const& config) : RTLSDR(selector, InvalidDeviceIndex, config) {}
+    RTLSDR(uint32_t deviceIndex, Config const& config) : RTLSDR(nullptr, deviceIndex, config)
+    {
+    }
+    RTLSDR(IDeviceSelector const* const selector, Config const& config) : RTLSDR(selector, InvalidDeviceIndex, config)
+    {
+    }
 
     CLASS_DELETE_COPY_AND_MOVE(RTLSDR);
 
@@ -264,8 +271,14 @@ struct RTLSDR
         _stopRequested = false;
     }
 
-    bool _HasSlot(std::unique_lock<std::mutex> const& /*lock*/) const { return ((_tail + 1) & _sizeMask) != _head; }
-    bool _IsEmpty(std::unique_lock<std::mutex> const& /*lock*/) const { return _head == _tail; }
+    bool _HasSlot(std::unique_lock<std::mutex> const& /*lock*/) const
+    {
+        return ((_tail + 1) & _sizeMask) != _head;
+    }
+    bool _IsEmpty(std::unique_lock<std::mutex> const& /*lock*/) const
+    {
+        return _head == _tail;
+    }
 
     void _OnDataAvailable(std::span<uint8_t const> const& data)
     {
@@ -310,7 +323,10 @@ struct RTLSDR
         }
     }
 
-    ~RTLSDR() { Stop(); }
+    ~RTLSDR()
+    {
+        Stop();
+    }
 
     private:
     static void _Callback(uint8_t* buf, uint32_t len, void* ctx) noexcept

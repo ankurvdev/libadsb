@@ -1,5 +1,11 @@
 #pragma once
+#include "CommonMacros.h"
+
+SUPPRESS_WARNINGS_START
+SUPPRESS_MSVC_STL_WARNINGS
 #include <chrono>
+SUPPRESS_WARNINGS_END
+
 #include <memory>
 #include <string_view>
 
