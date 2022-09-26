@@ -20,16 +20,8 @@ std::shared_ptr<TrafficManager>& GetThreadLocalTrafficManager()
 
 struct UAT978Handler : RTLSDR::IDataHandler
 {
-    struct DeviceSelector : RTLSDR::IDeviceSelector
-    {
-        virtual bool SelectDevice(RTLSDR::DeviceInfo const& d) const override
-        {
-            return std::string_view(d.serial).find("978") != std::string_view::npos;
-        }
-    };
-
-    UAT978Handler(std::shared_ptr<TrafficManager> trafficManager) :
-        _trafficManager(trafficManager), _listener978{&_selector, RTLSDR::Config{.gain = 48, .frequency = 978000000, .sampleRate = 2083334}}
+    UAT978Handler(std::shared_ptr<TrafficManager> trafficManager, RTLSDR::IDeviceSelector const* selector) :
+        _trafficManager(trafficManager), _listener978{selector, RTLSDR::Config{.gain = 48, .frequency = 978000000, .sampleRate = 2083334}}
     {
         std::fill(std::begin(_buffer), std::end(_buffer), uint16_t{0u});
         std::fill(std::begin(_iqphase), std::end(_iqphase), uint16_t{0u});
@@ -95,15 +87,14 @@ struct UAT978Handler : RTLSDR::IDataHandler
     }
 
     std::shared_ptr<TrafficManager> _trafficManager;
-    DeviceSelector                  _selector;
     RTLSDR                          _listener978;
     size_t                          _used   = 0;
     uint64_t                        _offset = 0;
     uint16_t                        _buffer[256 * 256];
     uint16_t                        _iqphase[256 * 256];
 
-    static std::unique_ptr<UAT978Handler> TryCreate(std::shared_ptr<TrafficManager> trafficManager)
+    static std::unique_ptr<UAT978Handler> TryCreate(std::shared_ptr<TrafficManager> trafficManager, RTLSDR::IDeviceSelector const* selector)
     {
-        return std::make_unique<UAT978Handler>(trafficManager);
+        return std::make_unique<UAT978Handler>(trafficManager, selector);
     }
 };

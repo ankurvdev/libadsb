@@ -96,7 +96,17 @@ if (MSVC)
 endif()
 target_link_libraries(dump978 PRIVATE rtlsdr::rtlsdr)
 
-add_library(adsb STATIC ADSBListener.h ADSBListener.cpp ADSB1090.h)
+add_library(adsb STATIC
+    ADSB1090.h
+    ADSBListener.h
+    AircraftImpl.h
+    CommonMacros.h
+    SetThreadName.h
+    UAT978.h
+
+    ADSBListener.cpp
+    )
+
 target_link_libraries(adsb PUBLIC dump978 rtlsdr::rtlsdr Threads::Threads)
 target_include_directories(adsb PUBLIC .)
 

@@ -237,10 +237,14 @@ struct RTLSDR
                 [this]()
                 {
                     SetThreadName("RTLSDR-Device-Reader");
-                    do
-                    {
-                        _WaitForValidDevice();
-                        rtlsdr_read_async(_dev, _Callback, this, _config.bufferCount, _config.bufferCount * _config.bufferLength);
+                    do {
+                        try {
+                            _WaitForValidDevice();
+                            rtlsdr_read_async(_dev, _Callback, this, _config.bufferCount,
+                                              _config.bufferCount * _config.bufferLength);
+                        }
+                        catch (std::exception const &) {
+                        }
                     } while (!_stopRequested);
                 });
         }

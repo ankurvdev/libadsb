@@ -3,8 +3,12 @@ include(GenerateExportHeader)
 #set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_VISIBILITY_PRESET hidden)
 set(CMAKE_VISIBILITY_INLINES_HIDDEN 1)
+
+if (MINGW)
 set(CMAKE_C_USE_RESPONSE_FILE_FOR_INCLUDES   OFF)
 set(CMAKE_CXX_USE_RESPONSE_FILE_FOR_INCLUDES OFF)
+endif()
+
 set(BuildEnvCMAKE_LOCATION "${CMAKE_CURRENT_LIST_DIR}")
 if (UNIX AND NOT ANDROID)
     set(LINUX 1)
@@ -78,6 +82,7 @@ macro(EnableStrictCompilation)
             /std:c++20
             /Zc:__cplusplus
             #suppression list
+            /wd4619  # pragma warning: there is no warning number
             /wd4068  # unknown pragma
             /wd4514  # unreferenced inline function has been removed
             /wd4820  # bytes padding added after data member in struct

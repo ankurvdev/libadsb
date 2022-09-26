@@ -133,8 +133,8 @@ struct ADSB1090Handler : RTLSDR::IDataHandler
         return lut;
     }
 
-    ADSB1090Handler(std::shared_ptr<TrafficManager> trafficManager) :
-        _trafficManager(trafficManager), _listener1090{&_selector, RTLSDR::Config{.frequency = 1090000000, .sampleRate = 2000000}}
+    ADSB1090Handler(std::shared_ptr<TrafficManager> trafficManager, RTLSDR::IDeviceSelector const* selector) :
+        _trafficManager(trafficManager), _listener1090{selector, RTLSDR::Config{.frequency = 1090000000, .sampleRate = 2000000}}
     {
         std::cout << "ADSB Tracker Initializing" << std::endl;
     }
@@ -186,9 +186,10 @@ struct ADSB1090Handler : RTLSDR::IDataHandler
     void _useModesMessage(Message* mm);
     void _modesSendSBSOutput(Message* mm, AirCraftImpl& a);
 
-    static std::unique_ptr<ADSB1090Handler> TryCreate(std::shared_ptr<TrafficManager> trafficManager)
+    static std::unique_ptr<ADSB1090Handler> TryCreate(std::shared_ptr<TrafficManager> trafficManager,
+                                                      RTLSDR::IDeviceSelector const*  selector)
     {
-        return std::make_unique<ADSB1090Handler>(trafficManager);
+        return std::make_unique<ADSB1090Handler>(trafficManager, selector);
     }
 
     std::unordered_map<uint32_t, std::chrono::system_clock::time_point> _icaoTimestamps;
@@ -1093,16 +1094,16 @@ static void decodeCPR(AirCraftImpl& a)
     if (a.cpr_even_time > a.cpr_odd_time)
     {
         /* Use even packet. */
-        int ni   = cprNFunction(rlat0, 0);
-        int m    = static_cast<int>(floor((((lon0 * (cprNLFunction(rlat0) - 1)) - (lon1 * cprNLFunction(rlat0))) / 131072) + 0.5));
+        int ni = cprNFunction(rlat0, 0);
+        int m  = static_cast<int>(floor((((lon0 * (cprNLFunction(rlat0) - 1)) - (lon1 * cprNLFunction(rlat0))) / 131072) + 0.5));
         lon1E7 = (cprDlonFunction(rlat0, 0) * (cprModFunction(m, ni) + lon0 / 131072) * 10000000);
         lat1E7 = (double{rlat0 * 10000000});
     }
     else
     {
         /* Use odd packet. */
-        int ni   = cprNFunction(rlat1, 1);
-        int m    = static_cast<int>(floor((((lon0 * (cprNLFunction(rlat1) - 1)) - (lon1 * cprNLFunction(rlat1))) / 131072.0) + 0.5));
+        int ni = cprNFunction(rlat1, 1);
+        int m  = static_cast<int>(floor((((lon0 * (cprNLFunction(rlat1) - 1)) - (lon1 * cprNLFunction(rlat1))) / 131072.0) + 0.5));
         lon1E7 = (cprDlonFunction(rlat1, 1) * (cprModFunction(m, ni) + lon1 / 131072) * 10000000);
         lat1E7 = (double{rlat1} * 10000000);
     }
