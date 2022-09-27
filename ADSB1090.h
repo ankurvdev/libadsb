@@ -133,8 +133,10 @@ struct ADSB1090Handler : RTLSDR::IDataHandler
         return lut;
     }
 
-    ADSB1090Handler(std::shared_ptr<TrafficManager> trafficManager, RTLSDR::IDeviceSelector const* selector) :
-        _trafficManager(trafficManager), _listener1090{selector, RTLSDR::Config{.frequency = 1090000000, .sampleRate = 2000000}}
+    ADSB1090Handler(std::shared_ptr<TrafficManager> trafficManager, RTLSDR::IDeviceSelector const* selector, uint8_t sourceId) :
+        _trafficManager(trafficManager),
+        _listener1090{selector, RTLSDR::Config{.frequency = 1090000000, .sampleRate = 2000000}},
+        _sourceId(sourceId)
     {
         std::cout << "ADSB Tracker Initializing" << std::endl;
     }
@@ -186,10 +188,10 @@ struct ADSB1090Handler : RTLSDR::IDataHandler
     void _useModesMessage(Message* mm);
     void _modesSendSBSOutput(Message* mm, AirCraftImpl& a);
 
-    static std::unique_ptr<ADSB1090Handler> TryCreate(std::shared_ptr<TrafficManager> trafficManager,
-                                                      RTLSDR::IDeviceSelector const*  selector)
+    static std::unique_ptr<ADSB1090Handler>
+    TryCreate(std::shared_ptr<TrafficManager> trafficManager, RTLSDR::IDeviceSelector const* selector, uint8_t sourceId)
     {
-        return std::make_unique<ADSB1090Handler>(trafficManager, selector);
+        return std::make_unique<ADSB1090Handler>(trafficManager, selector, sourceId);
     }
 
     std::unordered_map<uint32_t, std::chrono::system_clock::time_point> _icaoTimestamps;
@@ -207,6 +209,7 @@ struct ADSB1090Handler : RTLSDR::IDataHandler
     std::atomic<bool> _stopRequested{false};
     DeviceSelector    _selector;
     RTLSDR            _listener1090;
+    uint8_t           _sourceId{1};
     /* Statistics */
     long long _stat_valid_preamble{};
     long long _stat_demodulated{};
@@ -1148,7 +1151,7 @@ AirCraftImpl& ADSB1090Handler::_interactiveReceiveData(Message* mm)
     locctx.set_seen(now);
     // a.set_messageCount(int32_t{a.messageCount() + 1});
 #endif
-    a.sourceId = 1u;
+    a.sourceId = _sourceId;
     if (mm->msgtype == 0 || mm->msgtype == 4 || mm->msgtype == 20)
     {
         a.altitude = (static_cast<int32_t>(mm->altitude));

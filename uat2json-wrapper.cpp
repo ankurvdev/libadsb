@@ -5,18 +5,17 @@ extern "C"
 #include "dump978/uat_decode.h"
     void dump_raw_message(char updown, uint8_t* data, int len, int rs_errors);
 }
-#include "AircraftImpl.h"
+#include "UAT978.h"
 #include <iostream>
-
-std::shared_ptr<TrafficManager>& GetThreadLocalTrafficManager();
 
 void dump_raw_message(char /*updown*/, uint8_t* data, int /*len*/, int /*rs_errors*/)
 {
     struct uat_adsb_mdb mdb;
 
     uat_decode_adsb_mdb(data, &mdb);
-    auto  manager  = GetThreadLocalTrafficManager();
-    auto& aircraft = manager->FindOrCreate(mdb.address);
+    auto  handler  = *GetThreadLocalUAT978Handler();
+    auto& aircraft = handler->_trafficManager->FindOrCreate(mdb.address);
+    auto  sourceId = handler->_sourceId;
     if (mdb.has_ms)
     {
         /*
@@ -55,7 +54,7 @@ void dump_raw_message(char /*updown*/, uint8_t* data, int /*len*/, int /*rs_erro
         }
         if (mdb.callsign_type == CS_SQUAWK)
         {
-            std::cerr << "Squawk:" << aircraft.callsign << std::endl;
+            // std::cerr << "Squawk:" << aircraft.callsign << std::endl;
             // std::copy(std::begin(mdb.callsign), std::end(mdb.callsign), std::begin(aircraft.callsign));
         }
     }
@@ -117,5 +116,5 @@ void dump_raw_message(char /*updown*/, uint8_t* data, int /*len*/, int /*rs_erro
         }
     }
     aircraft.sourceId = 2u;
-    manager->NotifyChanged(aircraft);
+    handler->_trafficManager->NotifyChanged(aircraft);
 }

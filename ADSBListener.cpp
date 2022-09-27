@@ -20,8 +20,8 @@ struct ADSBDataProviderImpl : ADSB::IDataProvider
 
     ADSBDataProviderImpl()
     {
-        _handler978  = UAT978Handler::TryCreate(_trafficManager, &_rtlsdr978);
-        _handler1090 = ADSB1090Handler::TryCreate(_trafficManager, &_rtlsdr1090);
+        _handler978  = UAT978Handler::TryCreate(_trafficManager, &_rtlsdr978, 1);
+        _handler1090 = ADSB1090Handler::TryCreate(_trafficManager, &_rtlsdr1090, 2);
     }
 
     CLASS_DELETE_COPY_AND_MOVE(ADSBDataProviderImpl);

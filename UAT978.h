@@ -1,27 +1,32 @@
 #pragma once
 
+#include "AircraftImpl.h"
 #include "RTLSDR.h"
 
 #include <cmath>
 
-extern "C" void                  init_fec();
-extern "C" int                   process_buffer(uint16_t const*, size_t len, uint64_t c);
-extern "C" void                  make_atan2_table();
-extern "C" void                  convert_to_phi(uint16_t* buffer, int n);
-std::shared_ptr<TrafficManager>& GetThreadLocalTrafficManager();
+extern "C" void        init_fec();
+extern "C" int         process_buffer(uint16_t const*, size_t len, uint64_t c);
+extern "C" void        make_atan2_table();
+extern "C" void        convert_to_phi(uint16_t* buffer, int n);
+struct UAT978Handler** GetThreadLocalUAT978Handler();
 
-std::shared_ptr<TrafficManager>& GetThreadLocalTrafficManager()
+inline struct UAT978Handler** GetThreadLocalUAT978Handler()
 {
     SUPPRESS_WARNINGS_START
-    static thread_local std::shared_ptr<TrafficManager> manager;
+    static thread_local struct UAT978Handler* handler;
     SUPPRESS_WARNINGS_END
-    return manager;
+    return &handler;
 }
 
 struct UAT978Handler : RTLSDR::IDataHandler
 {
-    UAT978Handler(std::shared_ptr<TrafficManager> trafficManager, RTLSDR::IDeviceSelector const* selector) :
-        _trafficManager(trafficManager), _listener978{selector, RTLSDR::Config{.gain = 48, .frequency = 978000000, .sampleRate = 2083334}}
+    friend void dump_raw_message(char /*updown*/, uint8_t* data, int /*len*/, int /*rs_errors*/);
+
+    UAT978Handler(std::shared_ptr<TrafficManager> trafficManager, RTLSDR::IDeviceSelector const* selector, uint8_t sourceId) :
+        _trafficManager(trafficManager),
+        _listener978{selector, RTLSDR::Config{.gain = 48, .frequency = 978000000, .sampleRate = 2083334}},
+        _sourceId(sourceId)
     {
         std::fill(std::begin(_buffer), std::end(_buffer), uint16_t{0u});
         std::fill(std::begin(_iqphase), std::end(_iqphase), uint16_t{0u});
@@ -33,7 +38,7 @@ struct UAT978Handler : RTLSDR::IDataHandler
     virtual void HandleData(std::span<uint8_t const> const& dataBytes) override
     {
         std::span<uint16_t const> data(reinterpret_cast<uint16_t const*>(dataBytes.data()), dataBytes.size() / 2);
-        GetThreadLocalTrafficManager() = _trafficManager;
+        *GetThreadLocalUAT978Handler() = this;
 
         size_t j = 0;
         size_t i = _used;
@@ -92,9 +97,11 @@ struct UAT978Handler : RTLSDR::IDataHandler
     uint64_t                        _offset = 0;
     uint16_t                        _buffer[256 * 256];
     uint16_t                        _iqphase[256 * 256];
+    uint8_t                         _sourceId{2};
 
-    static std::unique_ptr<UAT978Handler> TryCreate(std::shared_ptr<TrafficManager> trafficManager, RTLSDR::IDeviceSelector const* selector)
+    static std::unique_ptr<UAT978Handler>
+    TryCreate(std::shared_ptr<TrafficManager> trafficManager, RTLSDR::IDeviceSelector const* selector, uint8_t sourceId)
     {
-        return std::make_unique<UAT978Handler>(trafficManager, selector);
+        return std::make_unique<UAT978Handler>(trafficManager, selector, sourceId);
     }
 };
