@@ -4,6 +4,7 @@
 #include "RTLSDR.h"
 
 #include <cmath>
+#include <cstring>
 
 extern "C" void        init_fec();
 extern "C" int         process_buffer(uint16_t const*, size_t len, uint64_t c);
@@ -52,7 +53,7 @@ struct UAT978Handler : RTLSDR::IDataHandler
             int bufferProcessed = process_buffer(_buffer, i, _offset);
             _offset             = static_cast<uint64_t>(static_cast<int64_t>(_offset) + bufferProcessed);
             // Move the rest of the buffer to the start
-            memmove(_buffer, _buffer + bufferProcessed, static_cast<size_t>(static_cast<int>(i) - bufferProcessed));
+	    std::memmove(_buffer, _buffer + bufferProcessed, static_cast<size_t>(static_cast<int>(i) - bufferProcessed));
             _used = static_cast<size_t>(static_cast<int>(i) - bufferProcessed);
         }
     }
