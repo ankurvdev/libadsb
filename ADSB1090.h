@@ -3,7 +3,7 @@
 #include "RTLSDR.h"
 
 SUPPRESS_WARNINGS_START
-SUPPRESS_MSVC_STL_WARNINGS
+SUPPRESS_STL_WARNINGS
 #include <SetThreadName.h>
 
 #include <cmath>
