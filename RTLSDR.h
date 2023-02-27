@@ -128,7 +128,7 @@ struct RTLSDR
                 }
                 else
                 {
-                    for (size_t i = 0; i < 100 && client->_mgrctx.startRequested; i++)
+                    for (size_t i = 0; i < 500 && client->_mgrctx.startRequested; i++)
                     {
                         std::this_thread::sleep_for(std::chrono::milliseconds{10});
                     }
