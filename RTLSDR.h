@@ -144,8 +144,9 @@ struct RTLSDR
         {
             std::unique_lock<std::mutex> guard(_mgr_mutex);
             client->_mgrctx.startRequested = false;
-            _ResetAll(guard);
+            _StopAll(guard);
             _clients.erase(client);
+            _ResetAll(guard);
         }
 
         void _StopAll(std::unique_lock<std::mutex>& /*guard*/)
@@ -167,6 +168,7 @@ struct RTLSDR
         void _ResetAll(std::unique_lock<std::mutex>& guard)
         {
             _StopAll(guard);
+            if (_clients.size() == 0) return;
             auto deviceCount = rtlsdr_get_device_count();
             for (uint32_t i = 0; i < deviceCount; i++)
             {
@@ -186,8 +188,14 @@ struct RTLSDR
                         || (client->_selector && client->_selector->SelectDevice(d)))
                     {
                         client->_mgrctx.dev = dev;
+                        dev = nullptr;
                         _OpenDevice(client);
+                        break;
                     }
+                }
+                if (dev != nullptr)
+                {
+                    rtlsdr_close(dev);
                 }
             }
         }
