@@ -9,6 +9,7 @@ SUPPRESS_STL_WARNINGS
 #include <fstream>
 SUPPRESS_WARNINGS_END
 
+#include <cassert>
 #include <condition_variable>
 #include <cstddef>
 #include <cstdint>
@@ -18,6 +19,7 @@ SUPPRESS_WARNINGS_END
 #include <span>
 #include <thread>
 #include <vector>
+#include <unordered_set>
 
 #define M_PI 3.14159265358979323846
 
@@ -63,25 +65,165 @@ struct RTLSDR
         virtual bool SelectDevice(DeviceInfo const& d) const = 0;
     };
 
-    static std::vector<DeviceInfo> GetAllDevices()
+    private:
+    struct _ManagerContext
+    {
+        bool          startRequested{false};
+        bool          listening{false};
+        rtlsdr_dev_t* dev{nullptr};
+    };
+
+    // RTLSDR is hugely single threaded
+    // Cannot open devices once a device is opened
+    // A manager is required for orchestration
+    struct _Manager
     {
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wexit-time-destructors"
-        static std::mutex _mutex;
+#pragma clang diagnostic ignored "-Wglobal-constructors"
+        static inline std::mutex              _mutex;
+        static inline std::weak_ptr<_Manager> _instance;
 #pragma clang diagnostic pop
-        std::lock_guard<std::mutex> guard(_mutex);
-        auto                        deviceCount = rtlsdr_get_device_count();
-        std::vector<DeviceInfo>     devices;
-        devices.resize(deviceCount);
-        for (uint32_t i = 0; i < deviceCount; i++)
+        static std::shared_ptr<_Manager> GetInstance()
         {
-            auto& d = devices[i];
-            d.index = i;
-            rtlsdr_get_device_usb_strings(d.index, d.vendor, d.product, d.serial);
+            std::lock_guard<std::mutex> lock_guard(_mutex);
+            if (_instance.expired())
+            {
+                auto ptr  = std::make_shared<_Manager>();
+                _instance = ptr;
+                return ptr;
+            }
+            return _instance.lock();
         }
-        return devices;
-    }
 
+        _Manager() = default;
+        CLASS_DELETE_COPY_AND_MOVE(_Manager);
+
+        void Start(RTLSDR* client)
+        {
+            {
+                std::unique_lock<std::mutex> guard(_mutex);
+                client->_mgrctx.startRequested = true;
+                _clients.insert(client);
+            }
+
+            while (client->_mgrctx.startRequested)
+            {
+                {
+                    std::unique_lock<std::mutex> guard(_mutex);
+                    _ResetAll(guard);
+                    if (client->_mgrctx.dev != nullptr)
+                    {
+                        client->_mgrctx.listening = true;
+                    }
+                }
+                if (client->_mgrctx.dev != nullptr)
+                {
+                    rtlsdr_read_async(client->_mgrctx.dev,
+                                      client->_Callback,
+                                      client,
+                                      client->_config.bufferCount,
+                                      client->_config.bufferCount * client->_config.bufferLength);
+                }
+                else
+                {
+                    for (size_t i = 0; i < 100 && client->_mgrctx.startRequested; i++)
+                    {
+                        std::this_thread::sleep_for(std::chrono::milliseconds{10});
+                    }
+                }
+                {
+                    std::unique_lock<std::mutex> guard(_mutex);
+                    client->_mgrctx.listening = false;
+                }
+            }
+        }
+
+        void Stop(RTLSDR* client)
+        {
+            std::unique_lock<std::mutex> guard(_mutex);
+            client->_mgrctx.startRequested = false;
+            _ResetAll(guard);
+            _clients.erase(client);
+        }
+
+        void _StopAll(std::unique_lock<std::mutex>& guard)
+        {
+            for (auto& client : _clients)
+            {
+                if (client->_mgrctx.dev != nullptr)
+                {
+                    while (client->_mgrctx.listening)
+                    {
+                        guard.unlock();
+                        rtlsdr_cancel_async(client->_mgrctx.dev);
+                        guard.lock();
+                    }
+                    rtlsdr_close(client->_mgrctx.dev);
+                    client->_mgrctx.dev = nullptr;
+                }
+            }
+        }
+
+        void _ResetAll(std::unique_lock<std::mutex>& guard)
+        {
+            _StopAll(guard);
+            auto deviceCount = rtlsdr_get_device_count();
+            for (uint32_t i = 0; i < deviceCount; i++)
+            {
+                DeviceInfo d;
+                d.index = i;
+                rtlsdr_get_device_usb_strings(d.index, d.vendor, d.product, d.serial);
+                rtlsdr_dev_t* dev;
+                if (rtlsdr_open(&dev, d.index) != 0)
+                {
+                    // logging
+                    continue;
+                }
+                for (auto& client : _clients)
+                {
+                    if (!client->_mgrctx.startRequested) continue;
+                    if ((client->_deviceIndex != InvalidDeviceIndex && d.index == client->_deviceIndex)
+                        || (client->_selector && client->_selector->SelectDevice(d)))
+                    {
+                        client->_mgrctx.dev = dev;
+                        _OpenDevice(client);
+                    }
+                }
+            }
+        }
+
+        void _OpenDevice(RTLSDR* client)
+        {
+            auto  dev    = client->_mgrctx.dev;
+            auto& config = client->_config;
+            /* Set gain, frequency, sample rate, and reset the device. */
+            rtlsdr_set_tuner_gain_mode(dev, (config.gain == AutoGain) ? 0 : 1);
+            if (config.gain != AutoGain)
+            {
+                if (config.gain == MaxGain)
+                {
+                    /* Find the maximum gain available. */
+                    int gains[100];
+                    int numgains = rtlsdr_get_tuner_gains(dev, gains);
+                    config.gain  = gains[numgains - 1];
+                }
+
+                rtlsdr_set_tuner_gain(dev, config.gain);
+            }
+
+            rtlsdr_set_freq_correction(dev, CorrectionPPM);
+            rtlsdr_set_agc_mode(dev, config.enableAGC);
+            rtlsdr_set_center_freq(dev, config.frequency);
+            rtlsdr_set_sample_rate(dev, config.sampleRate);
+            rtlsdr_reset_buffer(dev);
+            //_currentGain = rtlsdr_get_tuner_gain(dev) / 10;
+        }
+
+        std::unordered_set<RTLSDR*> _clients;
+    };
+
+    public:
     static constexpr uint32_t InvalidDeviceIndex = std::numeric_limits<uint32_t>::max();
 
     RTLSDR(IDeviceSelector const* const selector, uint32_t deviceIndex, Config const& config) :
@@ -103,7 +245,7 @@ struct RTLSDR
         }
         if (_deviceIndex != InvalidDeviceIndex)
         {
-            _OpenDevice(_deviceIndex);
+            //_OpenDevice(_deviceIndex);
         }
         else if (_selector == nullptr)
         {
@@ -111,78 +253,10 @@ struct RTLSDR
         }
     }
 
-    RTLSDR(uint32_t deviceIndex, Config const& config) : RTLSDR(nullptr, deviceIndex, config)
-    {
-    }
-    RTLSDR(IDeviceSelector const* const selector, Config const& config) : RTLSDR(selector, InvalidDeviceIndex, config)
-    {
-    }
+    RTLSDR(uint32_t deviceIndex, Config const& config) : RTLSDR(nullptr, deviceIndex, config) {}
+    RTLSDR(IDeviceSelector const* const selector, Config const& config) : RTLSDR(selector, InvalidDeviceIndex, config) {}
 
     CLASS_DELETE_COPY_AND_MOVE(RTLSDR);
-
-    void _OpenDevice(uint32_t deviceIndex)
-    {
-        if (rtlsdr_open(&_dev, deviceIndex) < 0) throw std::runtime_error("No supported RTLSDR devices found");
-
-        /* Set gain, frequency, sample rate, and reset the device. */
-        rtlsdr_set_tuner_gain_mode(_dev, (_config.gain == AutoGain) ? 0 : 1);
-        if (_config.gain != AutoGain)
-        {
-            if (_config.gain == MaxGain)
-            {
-                /* Find the maximum gain available. */
-                int gains[100];
-                int numgains = rtlsdr_get_tuner_gains(_dev, gains);
-                _config.gain = gains[numgains - 1];
-            }
-
-            rtlsdr_set_tuner_gain(_dev, _config.gain);
-        }
-
-        rtlsdr_set_freq_correction(_dev, CorrectionPPM);
-        rtlsdr_set_agc_mode(_dev, _config.enableAGC);
-        rtlsdr_set_center_freq(_dev, _config.frequency);
-        rtlsdr_set_sample_rate(_dev, _config.sampleRate);
-        rtlsdr_reset_buffer(_dev);
-        _currentGain = rtlsdr_get_tuner_gain(_dev) / 10;
-    }
-
-    void _WaitForValidDevice()
-    {
-        if (_dev) rtlsdr_close(_dev);
-        _dev = nullptr;
-        if (_selector != nullptr)
-        {
-            _deviceIndex = InvalidDeviceIndex;
-        }
-
-        time_point nextrun{};
-
-        while (!_stopRequested && _deviceIndex == InvalidDeviceIndex)
-        {
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
-            auto now = time_point::clock::now();
-            if (now < nextrun) continue;
-            nextrun = now + std::chrono::seconds{2};
-
-            for (auto const& d : RTLSDR::GetAllDevices())
-            {
-                if (_selector->SelectDevice(d)) try
-                    {
-                        _deviceIndex = d.index;
-                        break;
-                    }
-                    catch (std::exception const& /*ex*/)
-                    {
-                        // Skip and try again
-                    }
-            }
-        }
-        if (_dev == nullptr && _deviceIndex != InvalidDeviceIndex)
-        {
-            _OpenDevice(_deviceIndex);
-        }
-    }
 
     void _TestDataReadLoop()
     {
@@ -219,15 +293,16 @@ struct RTLSDR
     void Start(IDataHandler* handler)
     {
         Stop();
+        _stopRequested = false;
         _handler = handler;
-        _started = true;
+        if (_producerThrd.joinable()) _producerThrd.join();
+        if (_consumerThrd.joinable()) _consumerThrd.join();
         if (_useTestDataFile)
         {
             _producerThrd = std::thread(
                 [this]()
                 {
                     SetThreadName("RTLSDR-TestDataFile-Reader");
-
                     _TestDataReadLoop();
                 });
         }
@@ -237,15 +312,7 @@ struct RTLSDR
                 [this]()
                 {
                     SetThreadName("RTLSDR-Device-Reader");
-                    do {
-                        try {
-                            _WaitForValidDevice();
-                            rtlsdr_read_async(_dev, _Callback, this, _config.bufferCount,
-                                              _config.bufferCount * _config.bufferLength);
-                        }
-                        catch (std::exception const &) {
-                        }
-                    } while (!_stopRequested);
+                    _device_manager->Start(this);
                 });
         }
         _consumerThrd = std::thread(
@@ -258,31 +325,20 @@ struct RTLSDR
 
     void Stop()
     {
-        if (!_started)
-        {
-            return;
-        }
         _stopRequested = true;
-        if (!_useTestDataFile)
         {
-            rtlsdr_cancel_async(_dev);
+            std::unique_lock lock(_mutex);
+            _device_manager->Stop(this);
+            _cvDataConsumed.notify_all();
+            _cvDataAvailable.notify_all();
         }
-
-        _cvDataConsumed.notify_one();
-        _cvDataAvailable.notify_one();
-        if (_producerThrd.joinable()) _producerThrd.join();
-        if (_consumerThrd.joinable()) _consumerThrd.join();
-        _stopRequested = false;
+        // Joining can cause hangs on repeat start and stop if the data thread is waiting on mutex
+        // if (_producerThrd.joinable()) _producerThrd.join();
+        // if (_consumerThrd.joinable()) _consumerThrd.join();
     }
 
-    bool _HasSlot(std::unique_lock<std::mutex> const& /*lock*/) const
-    {
-        return ((_tail + 1) & _sizeMask) != _head;
-    }
-    bool _IsEmpty(std::unique_lock<std::mutex> const& /*lock*/) const
-    {
-        return _head == _tail;
-    }
+    bool _HasSlot(std::unique_lock<std::mutex> const& /*lock*/) const { return ((_tail + 1) & _sizeMask) != _head; }
+    bool _IsEmpty(std::unique_lock<std::mutex> const& /*lock*/) const { return _head == _tail; }
 
     void _OnDataAvailable(std::span<uint8_t const> const& data)
     {
@@ -316,7 +372,7 @@ struct RTLSDR
                     continue;
                 }
             }
-
+            if (_stopRequested) break;
             _handler->HandleData(_GetAtHead().data);
 
             {
@@ -330,6 +386,8 @@ struct RTLSDR
     ~RTLSDR()
     {
         Stop();
+        if (_producerThrd.joinable()) _producerThrd.join();
+        if (_consumerThrd.joinable()) _consumerThrd.join();
     }
 
     private:
@@ -345,14 +403,12 @@ struct RTLSDR
         }
     }
 
-    int _currentGain{};
+    std::shared_ptr<_Manager> _device_manager = _Manager::GetInstance();
+    _ManagerContext           _mgrctx;
 
     IDeviceSelector const* const _selector{};
-
-    uint32_t _deviceIndex{InvalidDeviceIndex};
-
-    Config        _config{};
-    rtlsdr_dev_t* _dev{nullptr};
+    uint32_t                     _deviceIndex{InvalidDeviceIndex};
+    Config                       _config{};
 
     struct Entry
     {
@@ -372,7 +428,6 @@ struct RTLSDR
     std::condition_variable _cvDataAvailable;
     std::condition_variable _cvDataConsumed;
     std::atomic_bool        _stopRequested{false};
-    std::atomic_bool        _started{false};
 
     std::ifstream         _testDataIFS;
     std::filesystem::path _testDataFile;
