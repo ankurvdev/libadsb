@@ -18,8 +18,8 @@ SUPPRESS_WARNINGS_END
 #include <mutex>
 #include <span>
 #include <thread>
-#include <vector>
 #include <unordered_set>
+#include <vector>
 
 #define M_PI 3.14159265358979323846
 
@@ -81,12 +81,12 @@ struct RTLSDR
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wexit-time-destructors"
 #pragma clang diagnostic ignored "-Wglobal-constructors"
-        static inline std::mutex              _mutex;
+        static inline std::mutex              _mgr_mutex;
         static inline std::weak_ptr<_Manager> _instance;
 #pragma clang diagnostic pop
         static std::shared_ptr<_Manager> GetInstance()
         {
-            std::lock_guard<std::mutex> lock_guard(_mutex);
+            std::lock_guard<std::mutex> lock_guard(_mgr_mutex);
             if (_instance.expired())
             {
                 auto ptr  = std::make_shared<_Manager>();
@@ -102,7 +102,7 @@ struct RTLSDR
         void Start(RTLSDR* client)
         {
             {
-                std::unique_lock<std::mutex> guard(_mutex);
+                std::unique_lock<std::mutex> guard(_mgr_mutex);
                 client->_mgrctx.startRequested = true;
                 _clients.insert(client);
             }
@@ -110,7 +110,7 @@ struct RTLSDR
             while (client->_mgrctx.startRequested)
             {
                 {
-                    std::unique_lock<std::mutex> guard(_mutex);
+                    std::unique_lock<std::mutex> guard(_mgr_mutex);
                     _ResetAll(guard);
                     if (client->_mgrctx.dev != nullptr)
                     {
@@ -124,6 +124,7 @@ struct RTLSDR
                                       client,
                                       client->_config.bufferCount,
                                       client->_config.bufferCount * client->_config.bufferLength);
+                    client->_mgrctx.listening = false;
                 }
                 else
                 {
@@ -133,7 +134,7 @@ struct RTLSDR
                     }
                 }
                 {
-                    std::unique_lock<std::mutex> guard(_mutex);
+                    std::unique_lock<std::mutex> guard(_mgr_mutex);
                     client->_mgrctx.listening = false;
                 }
             }
@@ -141,26 +142,24 @@ struct RTLSDR
 
         void Stop(RTLSDR* client)
         {
-            std::unique_lock<std::mutex> guard(_mutex);
+            std::unique_lock<std::mutex> guard(_mgr_mutex);
             client->_mgrctx.startRequested = false;
             _ResetAll(guard);
             _clients.erase(client);
         }
 
-        void _StopAll(std::unique_lock<std::mutex>& guard)
+        void _StopAll(std::unique_lock<std::mutex>& /*guard*/)
         {
-            for (auto& client : _clients)
+            for (auto client : _clients)
             {
                 if (client->_mgrctx.dev != nullptr)
                 {
-                    while (client->_mgrctx.listening)
-                    {
-                        guard.unlock();
-                        rtlsdr_cancel_async(client->_mgrctx.dev);
-                        guard.lock();
-                    }
-                    rtlsdr_close(client->_mgrctx.dev);
+                    auto dev            = client->_mgrctx.dev;
                     client->_mgrctx.dev = nullptr;
+                    // Could be after mutex release but before read_async
+                    while (client->_mgrctx.listening && rtlsdr_cancel_async(dev) != 0)
+                        ;
+                    rtlsdr_close(dev);
                 }
             }
         }
@@ -294,7 +293,7 @@ struct RTLSDR
     {
         Stop();
         _stopRequested = false;
-        _handler = handler;
+        _handler       = handler;
         if (_producerThrd.joinable()) _producerThrd.join();
         if (_consumerThrd.joinable()) _consumerThrd.join();
         if (_useTestDataFile)
@@ -326,12 +325,9 @@ struct RTLSDR
     void Stop()
     {
         _stopRequested = true;
-        {
-            std::unique_lock lock(_mutex);
-            _device_manager->Stop(this);
-            _cvDataConsumed.notify_all();
-            _cvDataAvailable.notify_all();
-        }
+        _device_manager->Stop(this);
+        _cvDataConsumed.notify_all();
+        _cvDataAvailable.notify_all();
         // Joining can cause hangs on repeat start and stop if the data thread is waiting on mutex
         // if (_producerThrd.joinable()) _producerThrd.join();
         // if (_consumerThrd.joinable()) _consumerThrd.join();
