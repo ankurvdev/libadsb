@@ -28,7 +28,7 @@
 
 #define SUPPRESS_FMT_WARNINGS                                                                                                \
     _Pragma("warning(disable : 4061)")     /* Not all labels are EXPLICITLY handled in switch */                             \
-        _Pragma("warning(disable : 4127)") /*conditional expression is constant */                                           \
+        _Pragma("warning(disable : 4127)") /* conditional expression is constant*/                                           \
         _Pragma("warning(disable : 4365)") /* signed / unsigned mismatch*/                                                   \
         _Pragma("warning(disable : 4582)") /* constructor is not implicitly called */                                        \
         _Pragma("warning(disable : 4623)") /* default constructor was implicitly defined as deleted*/                        \

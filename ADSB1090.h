@@ -24,7 +24,7 @@ SUPPRESS_WARNINGS_END
 #define MODES_UNIT_FEET 0
 #define MODES_UNIT_METERS 1
 
-//#define MODES_DEBUG_DEMOD (1 << 0)
+// #define MODES_DEBUG_DEMOD (1 << 0)
 #define MODES_DEBUG_DEMODERR (1 << 1)
 // #define MODES_DEBUG_BADCRC (1 << 2)
 // #define MODES_DEBUG_GOODCRC (1 << 3)
@@ -34,7 +34,7 @@ SUPPRESS_WARNINGS_END
 using time_point = std::chrono::time_point<std::chrono::system_clock>;
 /* When debug is set to MODES_DEBUG_NOPREAMBLE, the first sample must be
  * at least greater than a given level for us to dump the signal. */
-//#define MODES_DEBUG_NOPREAMBLE_LEVEL 25
+// #define MODES_DEBUG_NOPREAMBLE_LEVEL 25
 
 /* The struct we use to store information about a decoded message. */
 struct Message
@@ -205,7 +205,6 @@ struct ADSB1090Handler : RTLSDR::IDataHandler
 
     // DataRecorder<AirCraftImpl> _recorder;
     std::mutex        _mutex;
-    std::thread       _thrd;
     std::atomic<bool> _stopRequested{false};
     DeviceSelector    _selector;
     RTLSDR            _listener1090;
