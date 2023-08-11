@@ -4,3 +4,9 @@
 [submodule "dump978"]
 	path = dump978
 	url = https://github.com/ankurvdev/dump978
+[submodule "libusb-1.0"]
+	path = libusb-1.0
+	url = https://github.com/libusb/libusb.git
+[submodule "librtlsdr"]
+	path = librtlsdr
+	url = https://github.com/librtlsdr/librtlsdr.git
