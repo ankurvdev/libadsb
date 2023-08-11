@@ -26,10 +26,8 @@ inline void SetThreadName(const char* threadName)
     __try
     {
         RaiseException(/*MS_VC_EXCEPTION*/ 0x406D1388, 0, sizeof(info) / sizeof(ULONG_PTR), (ULONG_PTR*)&info);
-    }
-    __except (EXCEPTION_EXECUTE_HANDLER)
-    {
-    }
+    } __except (EXCEPTION_EXECUTE_HANDLER)
+    {}
 }
 
 #elif defined(__linux__)

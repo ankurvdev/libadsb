@@ -3,7 +3,7 @@
 
 SUPPRESS_WARNINGS_START
 SUPPRESS_STL_WARNINGS
-#include <SetThreadName.h>
+#include "SetThreadName.h"
 #include <rtl-sdr.h>
 
 #include <fstream>
