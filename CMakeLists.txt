@@ -13,9 +13,7 @@ EnableStrictCompilation()
 option(libadsb_BUILD_TESTING "Build Tests" ON)
 option(libadsb_PREFER_SYSTEM_LIB "Find packages and use system libs for dependencies" ON)
 
-#if (libadsb_PREFER_SYSTEM_LIB)
 find_package(LibUSB REQUIRED)
-#endif()
 find_package(LibRTLSDR REQUIRED)
 
 if (DEFINED LIBUSB_LIBRARIES AND DEFINED LIBUSB_INCLUDE_DIRS)
