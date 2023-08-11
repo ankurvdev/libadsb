@@ -7,6 +7,7 @@ SUPPRESS_STL_WARNINGS
 #include <rtl-sdr.h>
 
 #include <fstream>
+#include <future>
 SUPPRESS_WARNINGS_END
 
 #include <cassert>
@@ -72,9 +73,8 @@ struct RTLSDR
         ~_ManagerContext() = default;
         CLASS_DELETE_COPY_AND_MOVE(_ManagerContext);
 
-        std::atomic_bool startRequested{false};
-        std::atomic_bool listening{false};
-        rtlsdr_dev_t*    dev{nullptr};
+        std::atomic<bool>       running{false};
+        rtlsdr_dev_t*           dev{nullptr};
     };
 
     // RTLSDR is hugely single threaded
@@ -106,119 +106,165 @@ struct RTLSDR
         // Blocking call
         void Start(RTLSDR* client)
         {
+            SetThreadName("RTLSDR::ReadAsync");
             {
                 std::unique_lock<std::mutex> guard(_mgr_mutex);
-                _StopAll(guard);
-
-                client->_mgrctx.startRequested = true;
                 _clients.insert(client);
-                _ResetAll(guard);
             }
 
-            while (client->_mgrctx.startRequested)
+            while (true)
             {
+                SetThreadName("RTLSDR::ReadAsync");
+
+                rtlsdr_dev_t* dev = nullptr;
                 {
                     std::unique_lock<std::mutex> guard(_mgr_mutex);
-                    if (client->_mgrctx.dev != nullptr)
+                    if (_clients.count(client) == 0) return;
+                    _RequestDevice(guard);
+                }
+                do
+                {
                     {
-                        client->_mgrctx.listening = true;
+                        std::unique_lock<std::mutex> guard(_mgr_mutex);
+                        if (_clients.count(client) == 0) return;
+                        dev = client->_mgrctx.dev;
                     }
+                    if (dev == nullptr){
+                        std::this_thread::sleep_for(std::chrono::milliseconds{500});
+                    } else {
+                        client->_mgrctx.running = true;
+                    }
+                } while(dev == nullptr);
+
+                rtlsdr_read_async(dev,
+                                  client->_Callback,
+                                  client,
+                                  client->_config.bufferCount,
+                                  client->_config.bufferCount * client->_config.bufferLength);
+                client->_mgrctx.running = false;
+                std::unique_lock<std::mutex> guard(_mgr_mutex);
+                if (client->_mgrctx.dev != nullptr && dev == client->_mgrctx.dev){
+                    rtlsdr_close(dev);
+                    client->_mgrctx.dev = nullptr;
                 }
-                /* Start: Unlocked rtlsdr access */
-                if (client->_mgrctx.dev != nullptr)
-                {
-                    rtlsdr_read_async(client->_mgrctx.dev,
-                                      client->_Callback,
-                                      client,
-                                      client->_config.bufferCount,
-                                      client->_config.bufferCount * client->_config.bufferLength);
-                    client->_mgrctx.listening = false;
-                }
-                /* Start: Unlocked rtlsdr access */
-                else
-                {
-                    std::this_thread::sleep_for(std::chrono::milliseconds{10});
-                }
+            }
+        }
+
+        void _Stop(std::unique_lock<std::mutex>& /*guard*/, RTLSDR* client)
+        {
+            auto dev = client->_mgrctx.dev;
+            if (dev != nullptr)
+            {
+                while (client->_mgrctx.running && rtlsdr_cancel_async(dev) != 0)
+                    ;
+                while (client->_mgrctx.running) std::this_thread::sleep_for(std::chrono::milliseconds{1});
+                rtlsdr_close(dev);
+                client->_mgrctx.dev = nullptr;
             }
         }
 
         void Stop(RTLSDR* client)
         {
             std::unique_lock<std::mutex> guard(_mgr_mutex);
-            _StopAll(guard);
-
-            client->_mgrctx.startRequested = false;
+            _Stop(guard, client);
             _clients.erase(client);
-            _ResetAll(guard);
         }
 
-        void _StopAll(std::unique_lock<std::mutex>& /*guard*/)
-        {
-            for (auto client : _clients)
-            {
-                if (client->_mgrctx.dev != nullptr)
-                {
-                    auto dev = client->_mgrctx.dev;
-                    // Could be after mutex release but before read_async
-                    while (client->_mgrctx.listening && rtlsdr_cancel_async(dev) != 0)
-                        ;
-                    while (client->_mgrctx.listening) std::this_thread::sleep_for(std::chrono::milliseconds{1});
-                    client->_mgrctx.dev = nullptr;
-
-                    rtlsdr_close(dev);
-                }
-            }
-        }
-
-        void _ResetAll(std::unique_lock<std::mutex>& guard)
+        void _RequestDevice(std::unique_lock<std::mutex> const&/*guard*/)
         {
             if (_clients.size() == 0) return;
+            if (_deviceSearching) return;
+            _deviceSearching    = true;
+            _deviceSearchThread = std::async([this]() { this->_RequestDeviceImpl(); });
+        }
 
-            _StopAll(guard);
-            auto deviceCount = rtlsdr_get_device_count();
-            for (uint32_t i = 0; i < deviceCount; i++)
+        // Scenarios
+        // 1. Not enough devices.
+        // 2. Extra Devices
+        // 3. Disconnection
+        // 4. SpinDown
+        // 5. OnDeviceAvailable
+
+        void _RequestDeviceImpl()
+        {
+            SetThreadName("RTLSDR::ReqDev");
+            do
             {
-                DeviceInfo d;
-                d.index = i;
-                rtlsdr_get_device_usb_strings(d.index, d.vendor, d.product, d.serial);
-                rtlsdr_dev_t* dev;
-                if (rtlsdr_open(&dev, d.index) != 0)
+                try
                 {
-                    // logging
-                    continue;
-                }
-                for (auto& client : _clients)
-                {
-                    if (!client->_mgrctx.startRequested) continue;
-                    if (client->_mgrctx.dev) continue;    // from an earlier outer for loop
-                    if ((client->_deviceIndex != InvalidDeviceIndex && d.index == client->_deviceIndex)
-                        || (client->_selector && client->_selector->SelectDevice(d)))
+                    // Let things stabilize a little
+                    std::this_thread::sleep_for(std::chrono::milliseconds{100});
+
+                    std::unique_lock<std::mutex> guard(_mgr_mutex);
+                    _deviceSearching = false;
+                    if (_clients.size() == 0)
                     {
-                        _OpenDevice(dev, client->_config);
-                        client->_mgrctx.dev = dev;
-                        dev                 = nullptr;
-                        break;
+                        return;
                     }
-                }
-                if (dev != nullptr)
-                {
-                    // Couldnt match a selector. Just assign to the first client that needs a device
-                    for (auto& client : _clients)
+                    for (auto client : _clients)
                     {
-                        if (!client->_mgrctx.startRequested) continue;
-                        if (client->_mgrctx.dev) continue;    // from an earlier outer for loop
-                        _OpenDevice(dev, client->_config);
-                        client->_mgrctx.dev = dev;
-                        dev                 = nullptr;
-                        break;
+                        _Stop(guard, client);
                     }
+
+                    auto deviceCount = rtlsdr_get_device_count();
+                    while (deviceCount == 0)
+                    {
+                        std::this_thread::sleep_for(std::chrono::milliseconds{500});
+                        deviceCount = rtlsdr_get_device_count();
+                    }
+                    // Sometimes only one device shows up. Wait a bit and retry
+                    std::this_thread::sleep_for(std::chrono::milliseconds{500});
+                    deviceCount = rtlsdr_get_device_count();
+                    if (deviceCount == 0) continue;
+                    for (uint32_t i = 0; i < deviceCount; i++)
+                    {
+
+                        DeviceInfo d;
+                        d.index = i;
+                        rtlsdr_get_device_usb_strings(d.index, d.vendor, d.product, d.serial);
+                        rtlsdr_dev_t* dev;
+                        if (rtlsdr_open(&dev, d.index) != 0)
+                        {
+                            // logging
+                            continue;
+                        }
+                        for (auto& client : _clients)
+                        {
+                            if (client->_mgrctx.dev) continue;    // from an earlier outer for loop
+                            if ((client->_deviceIndex != InvalidDeviceIndex && d.index == client->_deviceIndex)
+                                || (client->_selector && client->_selector->SelectDevice(d)))
+                            {
+                                _OpenDevice(dev, client->_config);
+                                client->_mgrctx.dev = dev;
+                                dev                 = nullptr;
+                                break;
+                            }
+                        }
+                        if (dev != nullptr)
+                        {
+                            // Couldnt match a selector. Just assign to the first client that needs a device
+                            for (auto& client : _clients)
+                            {
+                                if (client->_mgrctx.dev) continue;    // from an earlier outer for loop
+                                _OpenDevice(dev, client->_config);
+                                client->_mgrctx.dev = dev;
+                                dev                 = nullptr;
+                                break;
+                            }
+                        }
+                        if (dev != nullptr)
+                        {
+                            // Couldnt find any client needing a device. Ignore and move on
+                            rtlsdr_close(dev);
+                        }
+                    }
+                    break;
                 }
-                if (dev != nullptr)
+                catch (std::exception const&)
                 {
-                    // Couldnt find any client needing a device. Ignore and move on
-                    rtlsdr_close(dev);
+                    _deviceSearching = true;
                 }
-            }
+            } while (true);
         }
 
         void _OpenDevice(rtlsdr_dev_t* dev, RTLSDR::Config const& config)
@@ -246,7 +292,8 @@ struct RTLSDR
             rtlsdr_reset_buffer(dev);
             //_currentGain = rtlsdr_get_tuner_gain(dev) / 10;
         }
-
+        bool                        _deviceSearching{false};
+        std::future<void>           _deviceSearchThread;
         std::unordered_set<RTLSDR*> _clients;
     };
 
@@ -324,6 +371,7 @@ struct RTLSDR
         _handler       = handler;
         if (_producerThrd.joinable()) _producerThrd.join();
         if (_consumerThrd.joinable()) _consumerThrd.join();
+
         if (_useTestDataFile)
         {
             _producerThrd = std::thread(
@@ -338,14 +386,14 @@ struct RTLSDR
             _producerThrd = std::thread(
                 [this]()
                 {
-                    SetThreadName("RTLSDR-Device-Reader");
+                    SetThreadName("RTLSDR::ReadAsync");
                     _device_manager->Start(this);
                 });
         }
         _consumerThrd = std::thread(
             [this]()
             {
-                SetThreadName("RTLSDR-Data-Processor");
+                SetThreadName("RTLSDR::DataHandler");
                 this->_ConsumerThreadLoop();
             });
     }
