@@ -4,7 +4,6 @@
 
 SUPPRESS_WARNINGS_START
 SUPPRESS_STL_WARNINGS
-#include <SetThreadName.h>
 
 #include <cmath>
 #include <future>
