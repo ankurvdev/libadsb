@@ -1,4 +1,3 @@
-include_guard(GLOBAL)
 cmake_minimum_required(VERSION 3.19)
 include(GenerateExportHeader)
 set(CMAKE_CXX_STANDARD 20)
