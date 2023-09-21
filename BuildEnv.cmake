@@ -194,6 +194,7 @@ macro(EnableStrictCompilation)
                 -Wno-c++98-compat-pedantic
                 -Wno-reserved-identifier # Allow names starting with underscore
                 -Wno-reserved-id-macro
+                -Wno-unsafe-buffer-usage
                 )
         endif()
 

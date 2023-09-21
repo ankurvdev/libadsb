@@ -94,6 +94,9 @@ target_compile_definitions(dump978 PRIVATE main=dump978_main1 _USE_MATH_DEFINES)
 if (MSVC)
     target_compile_options(dump978 PRIVATE /wd4242 /wd4334 /wd4013 /wd4996 /wd4701)
 endif()
+if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL Clang)
+    target_compile_options(dump978 PRIVATE -Wno-implicit-function-declaration)
+endif()
 target_link_libraries(dump978 PRIVATE rtlsdr::rtlsdr)
 
 add_library(adsb STATIC
