@@ -1,14 +1,21 @@
 #pragma once
+#ifndef _PRAGMA_STRINGIFY
+#define _PRAGMA_STRINGIFY2(x) _Pragma(#x)
+#define _PRAGMA_STRINGIFY(x) _PRAGMA_STRINGIFY2(x)
+#endif
 #if !(defined SUPPRESS_WARNINGS_START)
-#define SUPPRESS_WARNINGS_START                                                                 \
-    _Pragma("warning(push, 3)") _Pragma("clang diagnostic push") _Pragma("GCC diagnostic push") \
-        _Pragma("clang diagnostic ignored \"-Weverything\"")
+#if defined _MSC_VER
+#define SUPPRESS_WARNINGS_START _Pragma("warning(push, 3)")
 
-#define SUPPRESS_WARNINGS_END _Pragma("GCC diagnostic pop") _Pragma("clang diagnostic pop") _Pragma("warning(pop)")
+#define SUPPRESS_CLANG_WARNING(warning)
+#define SUPPRESS_GCC_WARNING(warning)
+#define SUPPRESS_MSVC_WARNING(warn) _PRAGMA_STRINGIFY(warning(disable : warn))
+#define SUPPRESS_WARNING(msvcwarning, clangwarning, gccwarning) SUPPRESS_MSVC_WARNING(msvcwarning)
+
+#define SUPPRESS_WARNINGS_END _Pragma("warning(pop)")
 
 #define SUPPRESS_STL_WARNINGS                                                                                                 \
-    _Pragma("GCC diagnostic ignored \"-Wmaybe-uninitialized\"")                                                               \
-        _Pragma("warning(disable : 4244)") /*'argument' : conversion from 'unsigned __int64' to 'size_t'*/                    \
+    _Pragma("warning(disable : 4244)")     /*'argument' : conversion from 'unsigned __int64' to 'size_t'*/                    \
         _Pragma("warning(disable : 4265)") /* class has virtual functions, but its non - trivial destructor is not virtual*/  \
         _Pragma("warning(disable : 4355)") /* 'this': used in base member initializer list*/                                  \
         _Pragma("warning(disable : 4365)") /* signed / unsigned mismatch*/                                                    \
@@ -38,6 +45,36 @@
         _Pragma("warning(disable : 5027)") /* move assignment operator was implicitly defined as deleted*/                   \
         _Pragma("warning(disable : 5204)") /* class has virtual functions, but its trivial destructor is not virtual;*/      \
         _Pragma("warning(disable : 4668)") /* not defined as a preprocessor macro, replacing with '0' f*/
+
+#elif defined(__clang__)
+#define SUPPRESS_WARNINGS_START _Pragma("clang diagnostic push")
+
+#define SUPPRESS_WARNINGS_END _Pragma("clang diagnostic pop")
+
+#define SUPPRESS_CLANG_WARNING(warning) _PRAGMA_STRINGIFY(clang diagnostic ignored warning)
+#define SUPPRESS_GCC_WARNING(warning)
+#define SUPPRESS_MSVC_WARNING(warning)
+#define SUPPRESS_WARNING(msvcwarning, clangwarning, gccwarning) SUPPRESS_CLANG_WARNING("clangwarning")
+
+#define SUPPRESS_STL_WARNINGS _Pragma("clang diagnostic ignored \"-Weverything\"")
+
+#define SUPPRESS_FMT_WARNINGS _Pragma("clang diagnostic ignored \"-Weverything\"")
+
+#elif defined(__GNUC__)
+#define SUPPRESS_WARNINGS_START _Pragma("GCC diagnostic push")
+
+#define SUPPRESS_WARNINGS_END _Pragma("GCC diagnostic pop")
+
+#define SUPPRESS_CLANG_WARNING(warning)
+#define SUPPRESS_GCC_WARNING(warning) _PRAGMA_STRINGIFY(GCC diagnostic ignored warning)
+#define SUPPRESS_MSVC_WARNING(warning)
+#define SUPPRESS_WARNING(msvcwarning, clangwarning, gccwarning) SUPPRESS_GCC_WARNING(gccwarning)
+
+#define SUPPRESS_STL_WARNINGS _Pragma("GCC diagnostic ignored \"-Wmaybe-uninitialized\"")
+
+#define SUPPRESS_FMT_WARNINGS
+
+#endif
 #endif
 
 #if (!defined CLASS_DEFAULT_COPY_AND_MOVE)
@@ -78,10 +115,15 @@
     name& operator=(name&&)      = delete
 #endif
 
-#if !defined             TODO
+#if !defined TODO
+#ifdef __cpp_exceptions
+
 [[noreturn]] inline void TodoFunc()
 {
     throw "Not Implemented:";
 }
+
 #define TODO(...) TodoFunc()
+#endif
+
 #endif
