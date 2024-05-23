@@ -10,3 +10,6 @@
 [submodule "rtl-sdr"]
 	path = rtl-sdr
 	url = https://github.com/osmocom/rtl-sdr
+[submodule "libusb-cmake"]
+	path = libusb-cmake
+	url = https://github.com/libusb/libusb-cmake
