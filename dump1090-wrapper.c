@@ -27,8 +27,8 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //
-#include "dump1090.h"
 #include "coaa.h"
+#include "dump1090.h"
 struct ProgramState Modes;
 
 //
@@ -138,24 +138,12 @@ int modesInit(void)
     // is at 0.0 Lon,so we must check for either fLat or fLon being non zero not both.
     // Testing the flag at runtime will be much quicker than ((fLon != 0.0) || (fLat != 0.0))
     Modes.bUserFlags &= ~MODES_USER_LATLON_VALID;
-    if ((Modes.fUserLat != 0.0) || (Modes.fUserLon != 0.0))
-    {
-        Modes.bUserFlags |= MODES_USER_LATLON_VALID;
-    }
+    if ((Modes.fUserLat != 0.0) || (Modes.fUserLon != 0.0)) { Modes.bUserFlags |= MODES_USER_LATLON_VALID; }
 
     // Limit the maximum requested raw output size to less than one Ethernet Block
-    if (Modes.net_output_raw_size > (MODES_RAWOUT_BUF_FLUSH))
-    {
-        Modes.net_output_raw_size = MODES_RAWOUT_BUF_FLUSH;
-    }
-    if (Modes.net_output_raw_rate > (MODES_RAWOUT_BUF_RATE))
-    {
-        Modes.net_output_raw_rate = MODES_RAWOUT_BUF_RATE;
-    }
-    if (Modes.net_sndbuf_size > (MODES_NET_SNDBUF_MAX))
-    {
-        Modes.net_sndbuf_size = MODES_NET_SNDBUF_MAX;
-    }
+    if (Modes.net_output_raw_size > (MODES_RAWOUT_BUF_FLUSH)) { Modes.net_output_raw_size = MODES_RAWOUT_BUF_FLUSH; }
+    if (Modes.net_output_raw_rate > (MODES_RAWOUT_BUF_RATE)) { Modes.net_output_raw_rate = MODES_RAWOUT_BUF_RATE; }
+    if (Modes.net_sndbuf_size > (MODES_NET_SNDBUF_MAX)) { Modes.net_sndbuf_size = MODES_NET_SNDBUF_MAX; }
 
     // Each I and Q value varies from 0 to 255, which represents a range from -1 to +1. To get from the
     // unsigned (0-255) range you therefore subtract 127 (or 128 or 127.5) from each I and Q, giving you
@@ -253,10 +241,7 @@ int modesInitRTLSDR(void)
         rtlsdr_set_tuner_gain(Modes.dev, Modes.gain);
         fprintf(stderr, "Setting gain to: %.2f\n", Modes.gain / 10.0);
     }
-    else
-    {
-        fprintf(stderr, "Using automatic gain control.\n");
-    }
+    else { fprintf(stderr, "Using automatic gain control.\n"); }
     rtlsdr_set_freq_correction(Modes.dev, Modes.ppm_error);
     if (Modes.enable_agc) rtlsdr_set_agc_mode(Modes.dev, 1);
     rtlsdr_set_center_freq(Modes.dev, Modes.freq);
@@ -286,10 +271,7 @@ void rtlsdrCallback(unsigned char* buf, uint32_t len, void* ctx)
 
     Modes.iDataIn &= (MODES_ASYNC_BUF_NUMBER - 1);    // Just incase!!!
 
-    if (len > MODES_ASYNC_BUF_SIZE)
-    {
-        len = MODES_ASYNC_BUF_SIZE;
-    }
+    if (len > MODES_ASYNC_BUF_SIZE) { len = MODES_ASYNC_BUF_SIZE; }
 
     // Queue the new data
     Modes.pData[Modes.iDataIn] = (uint16_t*)buf;
@@ -381,14 +363,8 @@ void* readerThreadEntryPoint(void* arg)
 {
     MODES_NOTUSED(arg);
 
-    if (Modes.filename == NULL)
-    {
-        rtlsdr_read_async(Modes.dev, rtlsdrCallback, NULL, MODES_ASYNC_BUF_NUMBER, MODES_ASYNC_BUF_SIZE);
-    }
-    else
-    {
-        readDataFromFile();
-    }
+    if (Modes.filename == NULL) { rtlsdr_read_async(Modes.dev, rtlsdrCallback, NULL, MODES_ASYNC_BUF_NUMBER, MODES_ASYNC_BUF_SIZE); }
+    else { readDataFromFile(); }
     // Signal to the other thread that new data is ready - dummy really so threads don't mutually lock
     pthread_cond_signal(&Modes.data_cond);
     pthread_mutex_unlock(&Modes.data_mutex);
@@ -416,10 +392,7 @@ void snipMode(int level)
             c++;
             if (c > MODES_PREAMBLE_SIZE) continue;
         }
-        else
-        {
-            c = 0;
-        }
+        else { c = 0; }
         putchar(i);
         putchar(q);
     }
@@ -516,9 +489,7 @@ void showCopyright(void)
            "\n");
 
     // delay for 1 second to give the user a chance to read the copyright
-    while (llTime >= time(NULL))
-    {
-    }
+    while (llTime >= time(NULL)) {}
 }
 #endif
 
@@ -647,10 +618,7 @@ int verbose_device_search(char* s)
         {
             fprintf(stderr, "Error Fetching device information for Device: %d", i);
         }
-        else
-        {
-            fprintf(stderr, "  %d:  %s, %s, SN: %s\n", i, vendor, product, serial);
-        }
+        else { fprintf(stderr, "  %d:  %s, %s, SN: %s\n", i, vendor, product, serial); }
     }
     fprintf(stderr, "\n");
     /* does string look like raw id number */
@@ -664,10 +632,7 @@ int verbose_device_search(char* s)
     for (i = 0; i < device_count; i++)
     {
         rtlsdr_get_device_usb_strings(i, vendor, product, serial);
-        if (strcmp(s, serial) != 0)
-        {
-            continue;
-        }
+        if (strcmp(s, serial) != 0) { continue; }
         device = i;
         fprintf(stderr, "Using device %d: %s\n", device, rtlsdr_get_device_name((uint32_t)device));
         return device;
@@ -676,10 +641,7 @@ int verbose_device_search(char* s)
     for (i = 0; i < device_count; i++)
     {
         rtlsdr_get_device_usb_strings(i, vendor, product, serial);
-        if (strncmp(s, serial, strlen(s)) != 0)
-        {
-            continue;
-        }
+        if (strncmp(s, serial, strlen(s)) != 0) { continue; }
         device = i;
         fprintf(stderr, "Using device %d: %s\n", device, rtlsdr_get_device_name((uint32_t)device));
         return device;
@@ -689,14 +651,8 @@ int verbose_device_search(char* s)
     {
         rtlsdr_get_device_usb_strings(i, vendor, product, serial);
         offset = strlen(serial) - strlen(s);
-        if (offset < 0)
-        {
-            continue;
-        }
-        if (strncmp(s, serial + offset, strlen(s)) != 0)
-        {
-            continue;
-        }
+        if (offset < 0) { continue; }
+        if (strncmp(s, serial + offset, strlen(s)) != 0) { continue; }
         device = i;
         fprintf(stderr, "Using device %d: %s\n", device, rtlsdr_get_device_name((uint32_t)device));
         return device;
@@ -718,40 +674,25 @@ int initlistener(uint32_t index)
     Modes.net       = 1;
 #ifdef _WIN32
     // Try to comply with the Copyright license conditions for binary distribution
-    if (!Modes.quiet)
-    {
-        showCopyright();
-    }
+    if (!Modes.quiet) { showCopyright(); }
 #endif
 
 #ifndef _WIN32
     // Setup for SIGWINCH for handling lines
-    if (Modes.interactive)
-    {
-        signal(SIGWINCH, sigWinchCallback);
-    }
+    if (Modes.interactive) { signal(SIGWINCH, sigWinchCallback); }
 #endif
 
     // Initialization
     modesInit();
 
-    if (Modes.net_only)
-    {
-        fprintf(stderr, "Net-only mode, no RTL device or file open.\n");
-    }
+    if (Modes.net_only) { fprintf(stderr, "Net-only mode, no RTL device or file open.\n"); }
     else if (Modes.filename == NULL)
     {
-        if (modesInitRTLSDR() != 0)
-        {
-            return -1;
-        }
+        if (modesInitRTLSDR() != 0) { return -1; }
     }
     else
     {
-        if (Modes.filename[0] == '-' && Modes.filename[1] == '\0')
-        {
-            Modes.fd = STDIN_FILENO;
-        }
+        if (Modes.filename[0] == '-' && Modes.filename[1] == '\0') { Modes.fd = STDIN_FILENO; }
         else if ((Modes.fd = open(Modes.filename,
 #ifdef _WIN32
                                   (O_RDONLY | O_BINARY)
@@ -838,10 +779,7 @@ void startlistener(const char* deviceName)
     }
 
     // If --stats were given, print statistics
-    if (Modes.stats)
-    {
-        display_stats();
-    }
+    if (Modes.stats) { display_stats(); }
 
     if (Modes.filename == NULL)
     {

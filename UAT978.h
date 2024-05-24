@@ -47,10 +47,7 @@ struct UAT978Handler : RTLSDR::IDataHandler
         size_t i = _used;
         while (j < data.size())
         {
-            for (i = _used; i < std::size(_buffer) && j < data.size(); i++, j++)
-            {
-                _buffer[i] = _iqphase[data[j]];
-            }
+            for (i = _used; i < std::size(_buffer) && j < data.size(); i++, j++) { _buffer[i] = _iqphase[data[j]]; }
 
             int bufferProcessed = process_buffer(_buffer, i, _offset);
             _offset             = static_cast<uint64_t>(static_cast<int64_t>(_offset) + bufferProcessed);

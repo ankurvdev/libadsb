@@ -124,10 +124,7 @@ struct ADSB1090Handler : RTLSDR::IDataHandler
         std::vector<uint16_t> lut(129 * 129 * 2);
         for (uint8_t i = 0; i <= 128; i++)
         {
-            for (uint8_t q = 0; q <= 128; q++)
-            {
-                lut[i * 129u + q] = static_cast<uint16_t>(std::round(std::sqrt(i * i + q * q) * 360));
-            }
+            for (uint8_t q = 0; q <= 128; q++) { lut[i * 129u + q] = static_cast<uint16_t>(std::round(std::sqrt(i * i + q * q) * 360)); }
         }
         return lut;
     }
@@ -430,10 +427,7 @@ static int decodeAC13Field(uint8_t* msg, int* unit)
              * by 25, minus 1000. */
             return n * 25 - 1000;
         }
-        else
-        {
-            /* TODO: Implement altitude where Q=0 and M=0 */
-        }
+        else { /* TODO: Implement altitude where Q=0 and M=0 */ }
     }
     else
     {
@@ -459,10 +453,7 @@ static int decodeAC12Field(uint8_t* msg, int* unit)
          * by 25, minus 1000. */
         return n * 25 - 1000;
     }
-    else
-    {
-        return 0;
-    }
+    else { return 0; }
 }
 
 /* Decode a raw Mode S message demodulated as a stream of bytes by
@@ -560,10 +551,7 @@ void ADSB1090Handler::_decodeModesMessage(Message* mm, uint8_t* msg)
             /* We recovered the message, mark the checksum as valid. */
             mm->crcok = 1;
         }
-        else
-        {
-            mm->crcok = 0;
-        }
+        else { mm->crcok = 0; }
     }
     else
     {
@@ -578,10 +566,7 @@ void ADSB1090Handler::_decodeModesMessage(Message* mm, uint8_t* msg)
     }
 
     /* Decode 13 bit altitude for DF0, DF4, DF16, DF20 */
-    if (mm->msgtype == 0 || mm->msgtype == 4 || mm->msgtype == 16 || mm->msgtype == 20)
-    {
-        mm->altitude = decodeAC13Field(msg, &mm->unit);
-    }
+    if (mm->msgtype == 0 || mm->msgtype == 4 || mm->msgtype == 16 || mm->msgtype == 20) { mm->altitude = decodeAC13Field(msg, &mm->unit); }
 
     /* Decode extended squitter specific stuff. */
     if (mm->msgtype == 17)
@@ -641,10 +626,7 @@ void ADSB1090Handler::_decodeModesMessage(Message* mm, uint8_t* msg)
                     /* We don't want negative values but a 0-360 scale. */
                     if (mm->heading < 0) mm->heading += 360;
                 }
-                else
-                {
-                    mm->heading = 0;
-                }
+                else { mm->heading = 0; }
             }
             else if (mm->mesub == 3 || mm->mesub == 4)
             {
@@ -816,10 +798,7 @@ void ADSB1090Handler::_detectModeS(uint16_t* m, uint32_t mlen)
             delta = low - high;
             if (delta < 0) delta = -delta;
 
-            if (i > 0 && delta < 256)
-            {
-                bits[i / 2] = bits[i / 2 - 1];
-            }
+            if (i > 0 && delta < 256) { bits[i / 2] = bits[i / 2 - 1]; }
             else if (low == high)
             {
                 /* Checking if two adiacent samples have the same magnitude
@@ -828,10 +807,7 @@ void ADSB1090Handler::_detectModeS(uint16_t* m, uint32_t mlen)
                 bits[i / 2] = 2; /* error */
                 if (i < Message::ShortMessageBits * 2) errors++;
             }
-            else if (low > high)
-            {
-                bits[i / 2] = 1;
-            }
+            else if (low > high) { bits[i / 2] = 1; }
             else
             {
                 /* (low < high) for exclusion  */
@@ -940,10 +916,7 @@ void ADSB1090Handler::_detectModeS(uint16_t* m, uint32_t mlen)
             j--;
             use_correction = 1;
         }
-        else
-        {
-            use_correction = 0;
-        }
+        else { use_correction = 0; }
     }
 }
 
@@ -956,10 +929,7 @@ void ADSB1090Handler::_detectModeS(uint16_t* m, uint32_t mlen)
  * further processing and visualization. */
 void ADSB1090Handler::_useModesMessage(Message* mm)
 {
-    if (_config.checkCRC && mm->crcok == 0)
-    {
-        return;
-    }
+    if (_config.checkCRC && mm->crcok == 0) { return; }
     _interactiveReceiveData(mm);
     // uint32_t addr = (static_cast<uint32_t>(mm->aa1) << 16) | (static_cast<uint32_t>(mm->aa2) << 8) | static_cast<uint32_t>(mm->aa3);
     //_modesSendSBSOutput(mm, _interactiveFindOrCreateAircraft(addr)); /* Feed SBS output clients. */
@@ -1108,10 +1078,7 @@ static void decodeCPR(AirCraftImpl& a)
         lon1E7 = (cprDlonFunction(rlat1, 1) * (cprModFunction(m, ni) + lon1 / 131072) * 10000000);
         lat1E7 = (double{rlat1} * 10000000);
     }
-    if (lon1E7 > 180 * 10000000)
-    {
-        lon1E7 -= 3600000000;
-    }
+    if (lon1E7 > 180 * 10000000) { lon1E7 -= 3600000000; }
     a.lat1E7 = static_cast<int32_t>(lat1E7);
     a.lon1E7 = static_cast<int32_t>(lon1E7);
 }

@@ -30,11 +30,16 @@ AllowAllParametersOfDeclarationOnNextLine: false
 #    aaaaaaaaaaaaaaaaaaaa,
 #    aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa);
 # }
+
+AllowShortLambdasOnASingleLine: true
+BreakBeforeBraces: Custom
+
+
 BinPackArguments: false
 BinPackParameters: false
 
 # if true this allows if (a) { return; } to be put on a single line.
-AllowShortBlocksOnASingleLine: false
+AllowShortBlocksOnASingleLine: true
 
 # true:                                   false:
 # switch (a) {                    vs.     switch (a) {
@@ -65,7 +70,24 @@ BreakBeforeBinaryOperators: All
 # {
 #  foo();
 # }
-BreakBeforeBraces: Allman
+BraceWrapping:
+    AfterCaseLabel: true
+    AfterClass: true
+    AfterControlStatement: Always
+    AfterEnum: true
+    AfterFunction: true
+    AfterNamespace: true
+    AfterStruct: true
+    AfterUnion: true
+    AfterExternBlock: true
+    BeforeCatch: false
+    BeforeElse: true
+    BeforeLambdaBody: false
+    BeforeWhile: false
+    IndentBraces: false
+    SplitEmptyFunction: false
+    SplitEmptyRecord: false
+    SplitEmptyNamespace: false
 
 # true:
 # veryVeryVeryVeryVeryVeryVeryVeryVeryVeryVeryLongDescription
@@ -118,7 +140,6 @@ Cpp11BracedListStyle: true
 # Force pointers to the type for C++.
 # int* a;
 DerivePointerBinding: false
-PointerAlignment: Left
 
 # Automatically add namespace comment at the end of namespace
 # namespace a {

@@ -25,11 +25,9 @@ extern "C" void TESTADSB_APP_EXPORT        android_update_location(JNIEnv* jniEn
 extern "C" void TESTADSB_APP_EXPORT        android_update_orientation(JNIEnv* jniEnv, jobject thiz, jint location);
 
 extern "C" void android_update_location(JNIEnv* /* jniEnv */, jobject /* thiz */, jobject /* location */)
-{
-}
+{}
 extern "C" void android_update_orientation(JNIEnv* /* jniEnv */, jobject /* thiz */, jint /* location */)
-{
-}
+{}
 
 struct ADSBTrackerImpl : ADSB::IListener
 {
