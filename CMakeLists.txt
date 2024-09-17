@@ -82,6 +82,8 @@ foreach(ex ${excludes})
     list(FILTER dump1090sources EXCLUDE REGEX "dump1090/${ex}")
 endforeach()
 
+check_include_files("unistd.h" HAVE_UNISTD_H)
+
 set(dump978_ROOT dump978)
 add_library(dump978 STATIC
     ${dump978_ROOT}/uat_decode.c
@@ -91,6 +93,11 @@ add_library(dump978 STATIC
     ${dump978_ROOT}/fec/init_rs_char.c
     uat2json-wrapper.cpp
 )
+
+if (HAVE_UNISTD_H)
+    target_compile_definitions(dump978 PRIVATE HAVE_UNISTD_H=1)
+endif()
+
 SupressWarningForTarget(dump978)
 target_compile_definitions(dump978 PRIVATE main=dump978_main1 _USE_MATH_DEFINES)
 if (MSVC)

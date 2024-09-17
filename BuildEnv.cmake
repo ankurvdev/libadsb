@@ -1,7 +1,7 @@
 include_guard(GLOBAL)
 cmake_minimum_required(VERSION 3.26)
 include(GenerateExportHeader)
-set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_VISIBILITY_PRESET hidden)
 set(CMAKE_C_VISIBILITY_PRESET hidden)
 set(CMAKE_VISIBILITY_INLINES_HIDDEN 1)
@@ -101,7 +101,7 @@ endmacro()
 macro(EnableStrictCompilation)
     find_package(Threads)
     file(TIMESTAMP "${BuildEnvCMAKE_LOCATION}/BuildEnv.cmake" filetime)
-    if (NOT DEFINED STRICT_COMPILATION_MODE OR NOT "${STRICT_COMPILATION_MODE}" STREQUAL "${filetime}")
+    if ((NOT DEFINED STRICT_COMPILATION_MODE) OR (NOT "${STRICT_COMPILATION_MODE}" STREQUAL "${filetime}"))
         if (MINGW)
             # set(CMAKE_C_USE_RESPONSE_FILE_FOR_INCLUDES   OFF)
             # set(CMAKE_CXX_USE_RESPONSE_FILE_FOR_INCLUDES OFF)
@@ -116,27 +116,32 @@ macro(EnableStrictCompilation)
             # `_ZThn24_N5boost10wrapexceptISt12out_of_rangeED0Ev' referenced in section `.rdata$_ZTVN5boost10wrapexceptISt12out_of_rangeEE' of C:\Users\VSSADM~1\AppData\Local\Temp\cc6jZeRp.ltrans0.ltrans.o: defined in discarded section `.gnu.linkonce.t._ZN5boost10wrapexceptISt12out_of_rangeED0Ev[_ZThn24_N5boost10wrapexceptISt12out_of_rangeED0Ev]' of CodegenRuntime/CMakeFiles/codegen_runtime_tests.dir/Test_Interfaces.cpp.obj (symbol from plugin)
             set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE OFF)
         endif()
-
+        if (WIN32)
+            if (DEFINED ENV{INCLUDE})
+                include_directories(SYSTEM $ENV{INCLUDE})
+            endif()
+        endif()
         if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
             set(extraflags
-                /external:W3 /external:anglebrackets /external:templates-
-                /Wall   # Enable all errors
-                /WX     # All warnings as errors
+                -external:W3 -external:anglebrackets -external:templates-
+                -Wall   # Enable all errors
+                -WX     # All warnings as errors
                 # /await
-                /permissive- # strict compilation
-                /DWIN32
-                /D_WINDOWS
-                /DNOMINMAX
-                /DWIN32_LEAN_AND_MEAN
-                /bigobj
-                /guard:cf
-                /std:c++20
-                /Zc:__cplusplus
+                -permissive- # strict compilation
+                -EHsc   # C++ Exceptions
+                -DWIN32
+                -D_WINDOWS
+                -DNOMINMAX
+                -DWIN32_LEAN_AND_MEAN
+                -bigobj
+                -guard:cf
+                -Zc:__cplusplus
 
                 #suppression list
                 /wd4619  # pragma warning: there is no warning number
                 /wd4514  # unreferenced inline function has been removed
                 /wd4820  # bytes padding added after data member in struct
+                /wd4868  # compiler may not enforce left-to-right evaluation order in braced initializer list
                 /wd5039  #  pointer or reference to potentially throwing function passed to 'extern "C"' function under -EHc.
                 /wd5045  # Spectre mitigation insertion
                 /wd5264  # const variable is not used
@@ -148,12 +153,11 @@ macro(EnableStrictCompilation)
                 /wd4746  # volatile access of 'b' is subject to /volatile:<iso|ms>
                 # TODO : Revisit with later cmake release. This causes cmake autodetect HAVE_STRUCT_TIMESPEC to fail
                 /wd4255  # The compiler did not find an explicit list of arguments to a function. This warning is for the C compiler only.
-            /wd5246  # MSVC Bug VS2022 :  the initialization of a subobject should be wrapped in braces
+                /wd5246  # MSVC Bug VS2022 :  the initialization of a subobject should be wrapped in braces
             )
 
             set(exclusions "[-/]W[a-zA-Z1-9]+" "[-/]permissive?" "[-/]external:W?" "[-/]external:anglebrackets?" "[-/]external:templates?")
             link_libraries(WindowsApp.lib rpcrt4.lib onecoreuap.lib kernel32.lib)
-
             _FixFlags(CMAKE_C_FLAGS     EXCLUDE ${exclusions} APPEND ${extraflags})
             _FixFlags(CMAKE_CXX_FLAGS   EXCLUDE ${exclusions} APPEND ${extraflags})
             # /RTCc rejects code that conforms to the standard, it's not supported by the C++ Standard Library
@@ -204,11 +208,13 @@ macro(EnableStrictCompilation)
                 list(APPEND extraflags -Wl,-u,htonl -Wl,-u,htons ) 
             endif()
             if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL Clang)
+                set(CMAKE_CXX_CLANG_TIDY clang-tidy -fix)
                 list(APPEND extraflags
+                    -fcxx-exceptions
                     -Weverything
                     -Wno-weak-vtables # Virtual Classes will actually be virtual
                     -Wno-return-std-move-in-c++11 # Rely on guaranteed copy ellisioning
-                    -Wno-c++98-c++11-c++14-compat
+                    -Wno-c++98-c++11-c++14-c++17-compat
                     -Wno-documentation-unknown-command
                     -Wno-covered-switch-default
                     -Wno-documentation
@@ -219,14 +225,17 @@ macro(EnableStrictCompilation)
                     -Wno-unused-command-line-argument
                     -Wno-c++98-compat # Dont care about c++98 compatibility
                     -Wno-c++20-compat
+                    -Wno-c++20-extensions
                     -Wno-c++98-compat-pedantic
                     -Wno-reserved-identifier # Allow names starting with underscore
                     -Wno-reserved-id-macro
                     -Wno-unsafe-buffer-usage
                     )
+            else()
+                list(APPEND extracxxflags -Wno-error=stringop-overflow)
             endif()
 
-            if (MINGW)
+            if (MINGW OR WIN32)
                 # list(APPEND extraflags -O1)
                 # list(APPEND extraflags -Wa,-mbig-obj)
                 # list(APPEND extraflags -mconsole  -Wl,-subsystem,console)

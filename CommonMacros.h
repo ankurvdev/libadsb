@@ -4,7 +4,7 @@
 #define _PRAGMA_STRINGIFY(x) _PRAGMA_STRINGIFY2(x)
 #endif
 #if !(defined SUPPRESS_WARNINGS_START)
-#if defined _MSC_VER
+#if defined _MSC_VER && !defined __clang__
 #define SUPPRESS_WARNINGS_START _Pragma("warning(push, 3)")
 
 #define SUPPRESS_CLANG_WARNING(warning)
