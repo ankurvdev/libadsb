@@ -94,6 +94,7 @@ add_library(dump978 STATIC
     uat2json-wrapper.cpp
 )
 
+set_source_files_properties(${dump978_ROOT}/dump978.c PROPERTIES SKIP_LINTING ON)
 if (HAVE_UNISTD_H)
     target_compile_definitions(dump978 PRIVATE HAVE_UNISTD_H=1)
 endif()

@@ -22,7 +22,7 @@ inline struct UAT978Handler** GetThreadLocalUAT978Handler()
 
 struct UAT978Handler : RTLSDR::IDataHandler
 {
-    friend void dump_raw_message(char /*updown*/, uint8_t* data, int /*len*/, int /*rs_errors*/);
+    friend void DumpRawMessage(char /*updown*/, uint8_t* data, int /*len*/, int /*rs_errors*/);
 
     UAT978Handler(std::shared_ptr<TrafficManager> trafficManager, RTLSDR::IDeviceSelector const* selector, uint8_t sourceId) :
         _trafficManager(trafficManager),
