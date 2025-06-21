@@ -1,15 +1,12 @@
-[submodule "dump1090"]
-	path = dump1090
-	url = https://github.com/flightaware/dump1090
 [submodule "dump978"]
 	path = dump978
 	url = https://github.com/ankurvdev/dump978
-[submodule "libusb"]
-	path = libusb
-	url = https://github.com/ankurvdev/libusb
 [submodule "rtl-sdr"]
 	path = rtl-sdr
 	url = https://github.com/osmocom/rtl-sdr
 [submodule "libusb-cmake"]
 	path = libusb-cmake
 	url = https://github.com/libusb/libusb-cmake
+[submodule "dump1090"]
+	path = dump1090
+	url = https://github.com/flightaware/dump1090
