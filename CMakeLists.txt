@@ -85,14 +85,14 @@ check_include_files("unistd.h" HAVE_UNISTD_H)
 
 set(dump978_ROOT dump978)
 add_library(dump978 STATIC
-    ${dump978_ROOT}/uat_decode.c
-    ${dump978_ROOT}/dump978.c
-    ${dump978_ROOT}/fec.c
-    ${dump978_ROOT}/fec/decode_rs_char.c
-    ${dump978_ROOT}/fec/init_rs_char.c
+    ${dump978_ROOT}/legacy/uat_decode.c
+    ${dump978_ROOT}/legacy/dump978.c
+    ${dump978_ROOT}/legacy/fec.c
+    ${dump978_ROOT}/libs/fec/decode_rs_char.c
+    ${dump978_ROOT}/libs/fec/init_rs_char.c
     uat2json-wrapper.cpp
 )
-
+target_include_directories(dump978 PRIVATE ${dump978_ROOT}/libs .)
 set_source_files_properties(${dump978_ROOT}/dump978.c PROPERTIES SKIP_LINTING ON)
 if (HAVE_UNISTD_H)
     target_compile_definitions(dump978 PRIVATE HAVE_UNISTD_H=1)

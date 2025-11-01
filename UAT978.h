@@ -7,7 +7,7 @@
 #include <cstring>
 
 extern "C" void        init_fec();
-extern "C" int         process_buffer(uint16_t const*, size_t len, uint64_t c);
+extern "C" int         process_buffer(uint16_t const*, int len, uint64_t c);
 extern "C" void        make_atan2_table();
 extern "C" void        convert_to_phi(uint16_t* buffer, int n);
 struct UAT978Handler** GetThreadLocalUAT978Handler();
@@ -15,6 +15,7 @@ struct UAT978Handler** GetThreadLocalUAT978Handler();
 inline struct UAT978Handler** GetThreadLocalUAT978Handler()
 {
     SUPPRESS_WARNINGS_START
+    SUPPRESS_CLANG_WARNING("-Wunique-object-duplication")
     static thread_local struct UAT978Handler* handler;
     SUPPRESS_WARNINGS_END
     return &handler;
@@ -49,7 +50,7 @@ struct UAT978Handler : RTLSDR::IDataHandler
         {
             for (i = _used; i < std::size(_buffer) && j < data.size(); i++, j++) { _buffer[i] = _iqphase[data[j]]; }
 
-            int bufferProcessed = process_buffer(_buffer, i, _offset);
+            int bufferProcessed = process_buffer(_buffer, static_cast<int>(i), _offset);
             _offset             = static_cast<uint64_t>(static_cast<int64_t>(_offset) + bufferProcessed);
             // Move the rest of the buffer to the start
             std::memmove(_buffer, _buffer + bufferProcessed, static_cast<size_t>(static_cast<int>(i) - bufferProcessed));

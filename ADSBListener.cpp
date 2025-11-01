@@ -23,6 +23,7 @@ struct ADSBDataProviderImpl : ADSB::IDataProvider
         handler978  = UAT978Handler::TryCreate(trafficManager, &rtlsdr978, 1);
         handler1090 = ADSB1090Handler::TryCreate(trafficManager, &rtlsdr1090, 2);
     }
+
     ~ADSBDataProviderImpl() override = default;
     CLASS_DELETE_COPY_AND_MOVE(ADSBDataProviderImpl);
 

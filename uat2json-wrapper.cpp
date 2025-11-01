@@ -2,8 +2,8 @@ extern "C"
 {
     // NOLINTBEGIN(readability-magic-numbers)
 
-#include "dump978/uat.h"
-#include "dump978/uat_decode.h"
+#include "dump978/legacy/uat.h"
+#include "dump978/legacy/uat_decode.h"
     void dump_raw_message(char updown, uint8_t* data, int len, int rsErrors);    // NOLINT
 }
 #include "UAT978.h"
@@ -106,7 +106,7 @@ void dump_raw_message(char /*updown*/, uint8_t* data, int /*len*/, int /*rs_erro
 
     if (mdb.has_auxsv)
     {
-#if defined TODO_ALTITUDE_TYPE
+#ifdef TODO_ALTITUDE_TYPE
         switch (mdb.sec_altitude_type)
         {
         case ALT_BARO: /*mdb.sec_altitude;*/ break;

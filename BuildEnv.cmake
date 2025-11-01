@@ -1,36 +1,18 @@
+# cppforge-sync
 include_guard(GLOBAL)
 cmake_minimum_required(VERSION 3.26)
 include(GenerateExportHeader)
-set(CMAKE_CXX_STANDARD 23)
-set(CMAKE_CXX_VISIBILITY_PRESET hidden)
-set(CMAKE_C_VISIBILITY_PRESET hidden)
-set(CMAKE_VISIBILITY_INLINES_HIDDEN 1)
-set(CMAKE_EXPORT_COMPILE_COMMANDS 1)
-set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+set(BuildEnvCMAKE_LOCATION "${CMAKE_CURRENT_LIST_DIR}")
+
+# Fix for error
+#"CMAKE_CXX_COMPILER_CLANG_SCAN_DEPS-NOTFOUND" -format=p1689 -- /usr/bin/c++ -x c++ ... 
+#/bin/sh: 1: CMAKE_CXX_COMPILER_CLANG_SCAN_DEPS-NOTFOUND: not found
+# https://discourse.cmake.org/t/cmake-3-28-cmake-cxx-compiler-clang-scan-deps-notfound-not-found/9244/2
+set(CMAKE_CXX_SCAN_FOR_MODULES 0)
 
 if (UNIX AND NOT ANDROID AND NOT EMSCRIPTEN)
     set(LINUX 1)
 endif()
-
-
-# We directly enable flto=full on android
-# using this causes build failures
-set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE ON)
-set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELWITHDEBINFO ON)
-set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_MINSIZEREL ON)
-if (ANDROID OR EMSCRIPTEN)
-    # Flto=thin has issues with emscripten. We want to use full anyway
-    set(CMAKE_CXX_COMPILE_OPTIONS_IPO "-flto=full")
-endif()
-
-set(BuildEnvCMAKE_LOCATION "${CMAKE_CURRENT_LIST_DIR}")
-
-if (EMSCRIPTEN)
-    set(Threads_FOUND 1)
-    # set(CMAKE_EXECUTABLE_SUFFIX ".html")
-    set(CMAKE_CXX_COMPILE_OPTIONS_IPO "-flto=full")
-endif()
-
 if (IS_DIRECTORY ${BuildEnvCMAKE_LOCATION}/../Format.cmake AND NOT SKIP_FORMAT)
     if (NOT TARGET fix-clang-format)
         add_subdirectory(${BuildEnvCMAKE_LOCATION}/../Format.cmake Format.cmake)
@@ -94,12 +76,56 @@ function(_FixFlags name)
 endfunction()
 
 macro(InitClangDIntellisense)
-    file(GENERATE OUTPUT "${PROJECT_SOURCE_DIR}/.clangd"
-        CONTENT "CompileFlags:\n\tCompilationDatabase: \"${CMAKE_CURRENT_BINARY_DIR}\"")
+    get_property(clangd_initialized GLOBAL PROPERTY CLANGD_INITIALIZED)
+    if (NOT clangd_initialized)
+        set(tmpl "CompileFlags:\n\tCompilationDatabase: \"${CMAKE_CURRENT_BINARY_DIR}\"")
+        if (MSVC)
+            set(tmpl "CompileFlags:\n\tCompilationDatabase: \"${CMAKE_CURRENT_BINARY_DIR}\"\n\tAdd: [\"-std:c++latest\"]")
+        endif()
+        if (NOT "${PROJECT_SOURCE_DIR}" STREQUAL "")
+            file(GENERATE OUTPUT "${PROJECT_SOURCE_DIR}/.clangd" CONTENT "${tmpl}")
+        endif()
+    endif()
+    set_property(GLOBAL PROPERTY CLANGD_INITIALIZED ON)
 endmacro()
 
 macro(EnableStrictCompilation)
-    find_package(Threads)
+    set(CMAKE_CXX_STANDARD 26)
+    set(CMAKE_CXX_VISIBILITY_PRESET hidden)
+    set(CMAKE_C_VISIBILITY_PRESET hidden)
+    set(CMAKE_VISIBILITY_INLINES_HIDDEN ON)
+    set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+    set(CMAKE_LINK_WHAT_YOU_USE ON)
+    set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+
+    # We directly enable flto=full on android
+    # using this causes build failures
+    set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE ON)
+    set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELWITHDEBINFO ON)
+    set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_MINSIZEREL ON)
+    if (ANDROID OR EMSCRIPTEN)
+        # Flto=thin has issues with emscripten. We want to use full anyway
+        set(CMAKE_CXX_COMPILE_OPTIONS_IPO "-flto=full")
+    endif()
+
+    if (ANDROID AND CMAKE_HOST_SYSTEM MATCHES "Windows")
+        # Link what you use causes issues with android on windows
+        # ... clang++.exe ... cmake.exe" -E __run_co_compile --lwyu=ldd;-u;-r ...
+        # Error running 'ldd': no such file or directory
+        set(CMAKE_LINK_WHAT_YOU_USE OFF)
+    endif()
+
+
+    if (EMSCRIPTEN)
+        set(Threads_FOUND 1)
+        # set(CMAKE_EXECUTABLE_SUFFIX ".html")
+        set(CMAKE_CXX_COMPILE_OPTIONS_IPO "-flto=full")
+    endif()
+
+    if (CMAKE_CXX_COMPILER_LOADED)
+        find_package(Threads)
+    endif()
+
     file(TIMESTAMP "${BuildEnvCMAKE_LOCATION}/BuildEnv.cmake" filetime)
     if ((NOT DEFINED STRICT_COMPILATION_MODE) OR (NOT "${STRICT_COMPILATION_MODE}" STREQUAL "${filetime}"))
         if (MINGW)
@@ -114,7 +140,11 @@ macro(EnableStrictCompilation)
             # `_ZThn48_N5boost10wrapexceptINS_6system12system_errorEED0Ev' referenced in section `.rdata$_ZTVN5boost10wrapexceptINS_6system12system_errorEEE' of C:\Users\VSSADM~1\AppData\Local\Temp\cc6jZeRp.ltrans0.ltrans.o: defined in discarded section `.gnu.linkonce.t._ZN5boost10wrapexceptINS_6system12system_errorEED0Ev[_ZThn48_N5boost10wrapexceptINS_6system12system_errorEED0Ev]' of CodegenRuntime/CMakeFiles/codegen_runtime_tests.dir/Test_Interfaces.cpp.obj (symbol from plugin)
             # `_ZThn8_N5boost10wrapexceptISt12out_of_rangeED1Ev' referenced in section `.rdata$_ZTVN5boost10wrapexceptISt12out_of_rangeEE' of C:\Users\VSSADM~1\AppData\Local\Temp\cc6jZeRp.ltrans0.ltrans.o: defined in discarded section `.gnu.linkonce.t._ZN5boost10wrapexceptISt12out_of_rangeED1Ev[_ZThn8_N5boost10wrapexceptISt12out_of_rangeED1Ev]' of CodegenRuntime/CMakeFiles/codegen_runtime_tests.dir/Test_Interfaces.cpp.obj (symbol from plugin)
             # `_ZThn24_N5boost10wrapexceptISt12out_of_rangeED0Ev' referenced in section `.rdata$_ZTVN5boost10wrapexceptISt12out_of_rangeEE' of C:\Users\VSSADM~1\AppData\Local\Temp\cc6jZeRp.ltrans0.ltrans.o: defined in discarded section `.gnu.linkonce.t._ZN5boost10wrapexceptISt12out_of_rangeED0Ev[_ZThn24_N5boost10wrapexceptISt12out_of_rangeED0Ev]' of CodegenRuntime/CMakeFiles/codegen_runtime_tests.dir/Test_Interfaces.cpp.obj (symbol from plugin)
+
+            # 2025-06-21 Turning on LTO for release seems to be causing: undefined reference to `wWinMain'
             set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE OFF)
+            set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELWITHDEBINFO OFF)
+            set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_MINSIZEREL OFF)
         endif()
         if (WIN32)
             if (DEFINED ENV{INCLUDE})
@@ -138,22 +168,25 @@ macro(EnableStrictCompilation)
                 -Zc:__cplusplus
 
                 #suppression list
-                /wd4619  # pragma warning: there is no warning number
                 /wd4514  # unreferenced inline function has been removed
-                /wd4820  # bytes padding added after data member in struct
-                /wd4868  # compiler may not enforce left-to-right evaluation order in braced initializer list
-                /wd5039  #  pointer or reference to potentially throwing function passed to 'extern "C"' function under -EHc.
-                /wd5045  # Spectre mitigation insertion
-                /wd5264  # const variable is not used
-
-                # TODO : Revisit these with newer VS Releases
+                /wd4619  # pragma warning: there is no warning number
                 /wd4710  # Function not inlined. VS2019 CRT throws this
                 /wd4711  # Function selected for automatic inline. VS2019 CRT throws this
                 /wd4738  # storing 32-bit float result in memory, possible loss of performance 10.0.19041.0\ucrt\corecrt_math.h(642)
-                /wd4746  # volatile access of 'b' is subject to /volatile:<iso|ms>
-                # TODO : Revisit with later cmake release. This causes cmake autodetect HAVE_STRUCT_TIMESPEC to fail
-                /wd4255  # The compiler did not find an explicit list of arguments to a function. This warning is for the C compiler only.
-                /wd5246  # MSVC Bug VS2022 :  the initialization of a subobject should be wrapped in braces
+                /wd4820  # bytes padding added after data member in struct
+                /wd4866  # compiler may not enforce left-to-right evaluation order in call to []
+                /wd4868  # compiler may not enforce left-to-right evaluation order in braced initializer list
+                /wd5039  #  pointer or reference to potentially throwing function passed to 'extern "C"' function under -EHc.
+                /wd5045  # Spectre mitigation insertion
+                # This is the old behavior and GCC and clang suppress it by default
+                # without this std::array will have to be initialized with double braces {{...}}
+                # which leaks the internal implementation details of std::array
+                /wd5246  # the initialization of a subobject should be wrapped in braces
+                /wd5264  # const variable is not used
+
+                # Revisit these with newer VS Releases
+                # Revisit with later cmake release. This causes cmake autodetect HAVE_STRUCT_TIMESPEC to fail
+                # /wd4255  # The compiler did not find an explicit list of arguments to a function. This warning is for the C compiler only.
             )
 
             set(exclusions "[-/]W[a-zA-Z1-9]+" "[-/]permissive?" "[-/]external:W?" "[-/]external:anglebrackets?" "[-/]external:templates?")
@@ -195,20 +228,35 @@ macro(EnableStrictCompilation)
             )
 
             if (NOT EMSCRIPTEN)
-                list(APPEND extraflags
-                        -Wl,--exclude-libs,ALL
-                        -Werror     # All warnings as errors
-                        -Wl,--gc-sections
-            )
+                string(APPEND CMAKE_SHARED_LINKER_FLAGS " -Wl,--exclude-libs,ALL -Wl,--no-undefined -Wl,--gc-sections")
+		string(APPEND CMAKE_EXE_LINKER_FLAGS " -Wl,--exclude-libs,ALL -Wl,--no-undefined -Wl,--gc-sections")
+                list(APPEND extraflags -Werror)     # All warnings as errors
             endif()
 
             if (EMSCRIPTEN)
                 list(APPEND extraflags -pthread -Wno-limited-postlink-optimizations -sASYNCIFY)
+                # string(APPEND CMAKE_LINKER_FLAGS " -Wl,-u,htonl -Wl,-u,htons")
                 #TODO https://github.com/emscripten-core/emscripten/issues/16836
-                list(APPEND extraflags -Wl,-u,htonl -Wl,-u,htons ) 
+                #list(APPEND extraflags -Wl,-u,htonl -Wl,-u,htons ) 
             endif()
             if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL Clang)
-                set(CMAKE_CXX_CLANG_TIDY clang-tidy -fix)
+                if (NOT DEFINED CLAND_TIDY_MODE)
+                    set(CLAND_TIDY_MODE FIX)
+                endif()
+                if (NOT DEFINED CLANG_TIDY_EXECUTABLE)
+                    find_program(CLANG_TIDY_EXECUTABLE NAMES "clang-tidy")
+                endif()
+                if(NOT "${CLANG_TIDY_EXECUTABLE}" STREQUAL "CLANG_TIDY_EXECUTABLE-NOTFOUND" AND NOT CMAKE_CROSSCOMPILING)
+                    if (CLANG_TIDY_MODE STREQUAL "FIX")
+                        set(CMAKE_CXX_CLANG_TIDY ${CLANG_TIDY_EXECUTABLE} -fix)
+                    elseif(CLANG_TIDY_MODE STREQUAL "AGGRESSIVE-FIX")
+                        set(CMAKE_CXX_CLANG_TIDY ${CLANG_TIDY_EXECUTABLE} -fix -fix-errors -fix-notes)
+                    elseif("${CLANG_TIDY_MODE}" STREQUAL "")
+                        set(CMAKE_CXX_CLANG_TIDY ${CLANG_TIDY_EXECUTABLE})
+                    else()
+                        message(FATAL_ERROR "Unknown CLANG_TIDY_MODE=${CLANG_TIDY_MODE}. Only FIX and AGGRESSIVE-FIX supported")
+                    endif()
+                endif()
                 list(APPEND extraflags
                     -fcxx-exceptions
                     -Weverything
@@ -230,24 +278,39 @@ macro(EnableStrictCompilation)
                     -Wno-reserved-identifier # Allow names starting with underscore
                     -Wno-reserved-id-macro
                     -Wno-unsafe-buffer-usage
+                    -Wno-disabled-macro-expansion # fmt::print(stderr, ...)
+                    -Wno-nrvo # clang-21
                     )
             else()
                 list(APPEND extracxxflags -Wno-error=stringop-overflow)
             endif()
 
+            if (MINGW)
+                list(APPEND extraflags -Wa,-mbig-obj)
+            endif()
             if (MINGW OR WIN32)
-                # list(APPEND extraflags -O1)
-                # list(APPEND extraflags -Wa,-mbig-obj)
-                # list(APPEND extraflags -mconsole  -Wl,-subsystem,console)
                 list(APPEND extraflags -DWIN32=1 -D_WINDOWS=1 -DWIN32_LEAN_AND_MEAN=1)
                 list(APPEND extracxxflags -DNOMINMAX=1)
             endif()
-
+            if (WIN32 AND NOT MINGW)
+                list(APPEND extracxxflags -EHsc)
+            endif()
             list(APPEND extracxxflags
                 #suppression list
                 -Wno-ctad-maybe-unsupported
                 -Wno-padded # Dont care about auto padding
+                -Wno-nrvo # clang-21
             )
+
+            if (NOT DEFINED CPPFORGE_DISABLE_MARCH_NATIVE AND DEFINED ENV{CPPFORGE_DISABLE_MARCH_NATIVE})
+                set(CPPFORGE_DISABLE_MARCH_NATIVE $ENV{CPPFORGE_DISABLE_MARCH_NATIVE})
+            else()
+                set(CPPFORGE_DISABLE_MARCH_NATIVE OFF)
+            endif()
+
+            if (NOT CMAKE_CROSSCOMPILING AND NOT CPPFORGE_DISABLE_MARCH_NATIVE)
+                list(APPEND extraflags -mtune=native -march=native)
+            endif()
 
             set(exclusions "[-/]W[a-zA-Z1-9]+")
             _FixFlags(CMAKE_C_FLAGS     EXCLUDE ${exclusions} APPEND ${extraflags})
@@ -257,12 +320,6 @@ macro(EnableStrictCompilation)
             _FixFlags(CMAKE_CXX_FLAGS_RELWITHDEBINFO EXCLUDE "-O[^3]+" APPEND "-O3")
             _FixFlags(CMAKE_C_FLAGS_RELEASE EXCLUDE "-O[^3]+" APPEND "-O3")
             _FixFlags(CMAKE_C_FLAGS_RELWITHDEBINFO EXCLUDE "-O[^3]+" APPEND "-O3")
-
-            if (MINGW)
-                # TODO GCC Bug: Compiling with -O1 can sometimes result errors
-                # due to running out of string slots (file too big)
-                _FixFlags(CMAKE_CXX_FLAGS_DEBUG EXCLUDE "-O." APPEND "-O1")
-            endif()
 
             if (ANDROID)
                 _FixFlags(CMAKE_CXX_LINK_OPTIONS_IPO EXCLUDE "-fuse-ld=gold")
@@ -295,13 +352,16 @@ endmacro()
 
 macro (SupressWarningForTarget targetName)
     if (TARGET ${targetName})
-        message(STATUS "Suppressing Warnings for ${targetName}")
-        if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
-            target_compile_options(${targetName} PRIVATE $<$<COMPILE_LANGUAGE:CXX>:/W3 /WX->)
-        elseif((${CMAKE_CXX_COMPILER_ID} STREQUAL Clang) OR (${CMAKE_CXX_COMPILER_ID} STREQUAL GNU))
-            target_compile_options(${targetName} PRIVATE -Wno-error -w)
-        else()
-            message(FATAL_ERROR "Unknown compiler : ${CMAKE_CXX_COMPILER_ID}")
+        get_target_property(tgttype ${targetName} TYPE)
+        if (NOT "${tgttype}" STREQUAL INTERFACE_LIBRARY)
+            message(STATUS "Suppressing Warnings for ${targetName}::${tgttype}")
+            if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
+                target_compile_options(${targetName} PRIVATE $<$<COMPILE_LANGUAGE:CXX>:/W3 /WX- >)
+            elseif((${CMAKE_CXX_COMPILER_ID} STREQUAL Clang) OR (${CMAKE_CXX_COMPILER_ID} STREQUAL GNU))
+                target_compile_options(${targetName} PRIVATE -Wno-error -w)
+            else()
+                message(FATAL_ERROR "Unknown compiler : ${CMAKE_CXX_COMPILER_ID}")
+            endif()
         endif()
     endif()
 endmacro()
