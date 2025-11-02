@@ -5,9 +5,10 @@ project(libadsb)
 
 include(CTest)
 include(GenerateExportHeader)
-set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD 26)
 
 EnableStrictCompilation()
+InitClangDIntellisense()
 
 option(libadsb_BUILD_TESTING "Build Tests" ON)
 option(libadsb_PREFER_SYSTEM_LIB "Find packages and use system libs for dependencies" ON)
@@ -115,7 +116,6 @@ add_library(adsb STATIC
     CommonMacros.h
     SetThreadName.h
     UAT978.h
-
     ADSBListener.cpp
     )
 

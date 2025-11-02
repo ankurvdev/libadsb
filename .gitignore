@@ -5,10 +5,8 @@
 .clangd
 .config
 build
-dist
 out
 CMakeSettings.json
 CMakeUserPresets.json
 __pycache__
-*.egg-info
 *venv

@@ -37,9 +37,10 @@ BreakBeforeBraces: Custom
 
 BinPackArguments: false
 BinPackParameters: false
+# BinPackLongBracedList: true # minimum clang-format-21
 
 # if true this allows if (a) { return; } to be put on a single line.
-AllowShortBlocksOnASingleLine: true
+AllowShortBlocksOnASingleLine: Always
 
 # true:                                   false:
 # switch (a) {                    vs.     switch (a) {
@@ -54,7 +55,7 @@ AllowShortCaseLabelsOnASingleLine: true
 AllowShortFunctionsOnASingleLine: InlineOnly
 
 # If true, if (a) return; can be put on a single line.
-AllowShortIfStatementsOnASingleLine: true
+AllowShortIfStatementsOnASingleLine: AllIfsAndElse
 AllowShortLoopsOnASingleLine: true
 
 # LooooooooooongType loooooooooooooooooooooongVariable
@@ -159,6 +160,12 @@ IncludeBlocks: Preserve
 # case 1:                                  case 1:
 IndentCaseLabels: false
 
+#false:                            true:
+#
+#int c                  vs.        int c = a + b;
+#
+#    = a + b;
+# RemoveEmptyLinesInUnwrappedLines: true # clang-format-20
 # true:                                  false:
 # int a = 5;                     vs.     int a=5;
 # a += 42                                a+=42;

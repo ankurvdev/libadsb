@@ -1,17 +1,14 @@
 #pragma once
 #include "AircraftImpl.h"
 #include "RTLSDR.h"
-#include <algorithm>
 
 SUPPRESS_WARNINGS_START
 SUPPRESS_STL_WARNINGS
-
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
-#include <future>
 #include <span>
-#include <thread>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -21,16 +18,25 @@ SUPPRESS_WARNINGS_END
 // NOLINTBEGIN(cppcoreguidelines-macro-usage)
 // NOLINTBEGIN(cppcoreguidelines-pro-bounds-constant-array-index)
 
-#define MODES_PREAMBLE_US 8 /* microseconds */
+enum
+{
+    MODES_PREAMBLE_US = 8 /* microseconds */
+};
 
 #define MODES_FULL_LEN (MODES_PREAMBLE_US + Message::LongMessageBits)
 
-#define MODES_ICAO_CACHE_TTL 60 /* Time to live of cached addresses. */
-#define MODES_UNIT_FEET 0
-#define MODES_UNIT_METERS 1
+enum
+{
+    ModesIcaoCacheTtl = 60, /* Time to live of cached addresses. */
+    ModesUnitFeet     = 0,
+    ModesUnitMeters   = 1
+};
 
 // #define MODES_DEBUG_DEMOD (1 << 0)
-#define MODES_DEBUG_DEMODERR (1 << 1)
+enum
+{
+    ModesDebugDemoderr = (1 << 1)
+};
 // #define MODES_DEBUG_BADCRC (1 << 2)
 // #define MODES_DEBUG_GOODCRC (1 << 3)
 // #define MODES_DEBUG_NOPREAMBLE (1 << 4)
@@ -67,24 +73,24 @@ struct Message
     /* DF 17 */
     int metype; /* Extended squitter message type. */
     int mesub;  /* Extended squitter message subtype. */
-    int heading_is_valid;
+    int headingIsValid;
     int heading;
-    int aircraft_type;
-    int fflag;         /* 1 = Odd, 0 = Even CPR message. */
-    int tflag;         /* UTC synchronized? */
-    int raw_latitude;  /* Non decoded latitude */
-    int raw_longitude; /* Non decoded longitude */
+    int aircraftType;
+    int fflag;        /* 1 = Odd, 0 = Even CPR message. */
+    int tflag;        /* UTC synchronized? */
+    int rawLatitude;  /* Non decoded latitude */
+    int rawLongitude; /* Non decoded longitude */
 
     std::array<char, 9> flight; /* 8 chars flight number. */
 
-    int ew_dir;           /* 0 = East, 1 = West. */
-    int ew_velocity;      /* E/W velocity. */
-    int ns_dir;           /* 0 = North, 1 = South. */
-    int ns_velocity;      /* N/S velocity. */
-    int vert_rate_source; /* Vertical rate source. */
-    int vert_rate_sign;   /* Vertical rate sign. */
-    int vert_rate;        /* Vertical rate. */
-    int velocity;         /* Computed from EW and NS velocity. */
+    int ewDir;          /* 0 = East, 1 = West. */
+    int ewVelocity;     /* E/W velocity. */
+    int nsDir;          /* 0 = North, 1 = South. */
+    int nsVelocity;     /* N/S velocity. */
+    int vertRateSource; /* Vertical rate source. */
+    int vertRateSign;   /* Vertical rate sign. */
+    int vertRate;       /* Vertical rate. */
+    int velocity;       /* Computed from EW and NS velocity. */
 
     /* DF4, DF5, DF20, DF21 */
     int fs;       /* Flight status for DF4,5,20,21 */
@@ -130,27 +136,33 @@ struct ADSB1090Handler : RTLSDR::IDataHandler
 
     static std::vector<uint16_t> CreateLUT()
     {
-        std::vector<uint16_t> lut(129 * 129 * 2);
+        std::vector<uint16_t> lut(129u * 129u * 2u);
         for (uint8_t i = 0; i <= 128; i++)
         {
-            for (uint8_t q = 0; q <= 128; q++) { lut[i * 129u + q] = static_cast<uint16_t>(std::round(std::sqrt(i * i + q * q) * 360)); }
+            for (uint8_t q = 0; q <= 128; q++)
+            {
+                lut[(i * 129u) + q] = static_cast<uint16_t>(std::round(std::sqrt((i * i) + (q * q)) * 360));
+            }
         }
         return lut;
     }
 
-    ADSB1090Handler(std::shared_ptr<TrafficManager> trafficManager, RTLSDR::IDeviceSelector const* selector, uint8_t sourceId) :
-        _trafficManager(std::move(trafficManager)),
-        _listener1090{selector, RTLSDR::Config{.frequency = 1090000000, .sampleRate = 2000000}},
-        _sourceId(sourceId)
+    ADSB1090Handler(std::shared_ptr<TrafficManager> trafficManagerIn, RTLSDR::IDeviceSelector const* selectorIn, uint8_t sourceIdIn) :
+        trafficManager(std::move(trafficManagerIn)),
+        listener1090{selectorIn, RTLSDR::Config{.frequency = 1090000000, .sampleRate = 2000000}},
+        sourceId(sourceIdIn)
     {
         std::cout << "ADSB Tracker Initializing" << '\n';
     }
+
+    ~ADSB1090Handler() override = default;
+
     CLASS_DELETE_COPY_AND_MOVE(ADSB1090Handler);
 
     void HandleData(std::span<uint8_t const> const& data) override
     {
-        uint16_t* m = _magnitudeVector.data();
-        auto*     p = data.data();
+        uint16_t*   m = magnitudeVector.data();
+        auto const* p = data.data();
 
         /* Compute the magnitudo vector. It's just SQRT(I^2 + Q^2), but
          * we rescale to the 0-255 range to exploit the full resolution. */
@@ -159,15 +171,15 @@ struct ADSB1090Handler : RTLSDR::IDataHandler
             int i = p[j] - 127;
             int q = p[j + 1] - 127;
 
-            if (i < 0) i = -i;
-            if (q < 0) q = -q;
-            m[j / 2] = _magnitudesLookupTable[static_cast<size_t>(i * 129 + q)];
+            if (i < 0) { i = -i; }
+            if (q < 0) { q = -q; }
+            m[j / 2] = magnitudesLookupTable[static_cast<size_t>((i * 129) + q)];
         }
         DetectModeS(std::span<uint16_t>(m, static_cast<uint32_t>(data.size() / 2)));
     }
 
-    void Start(ADSB::IListener& /*listener*/) { _listener1090.Start(this); }
-    void Stop() { _listener1090.Stop(); }
+    void Start(ADSB::IListener& /*listener*/) { listener1090.Start(this); }
+    void Stop() { listener1090.Stop(); }
 
     /* Add the specified entry to the cache of recently seen ICAO addresses.
      * Note that we also add a timestamp so that we can make sure that the
@@ -182,48 +194,48 @@ struct ADSB1090Handler : RTLSDR::IDataHandler
         auto it = icaoTimestamps.find(addr);
         return it != icaoTimestamps.end()
                && (std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now() - it->second).count()
-                   <= MODES_ICAO_CACHE_TTL);
+                   <= ModesIcaoCacheTtl);
     }
     int           BruteForceAp(std::array<uint8_t, Message::LongMessageBytes> const& msg, Message& mm);
     Message       DecodeModesMessage(std::array<uint8_t, Message::LongMessageBytes> const& msgIn);
     void          DetectModeS(std::span<uint16_t> const& m);
-    AirCraftImpl& InteractiveReceiveData(Message* mm);
+    AirCraftImpl& InteractiveReceiveData(Message const& mm);
     AirCraftImpl& InteractiveFindOrCreateAircraft(uint32_t addr);
 
-    void UseModesMessage(Message* mm);
-    void ModesSendSbsOutput(Message* mm, AirCraftImpl& a);
+    void UseModesMessage(Message const& mm);
+    void ModesSendSbsOutput(Message const& mm, AirCraftImpl& a);
 
     static std::unique_ptr<ADSB1090Handler>
-    TryCreate(std::shared_ptr<TrafficManager> const& trafficManager, RTLSDR::IDeviceSelector const* selector, uint8_t sourceId)
+    TryCreate(std::shared_ptr<TrafficManager> const& trafficManager, RTLSDR::IDeviceSelector const* selectorIn, uint8_t sourceId)
     {
-        return std::make_unique<ADSB1090Handler>(trafficManager, selector, sourceId);
+        return std::make_unique<ADSB1090Handler>(trafficManager, selectorIn, sourceId);
     }
 
     std::unordered_map<uint32_t, std::chrono::system_clock::time_point> icaoTimestamps;
 
-    Config                _config{};
-    std::vector<uint16_t> _magnitudesLookupTable = CreateLUT();
-    std::vector<uint8_t>  _data;
-    std::vector<uint16_t> _magnitudeVector = std::vector<uint16_t>(BufferLength, 0xffff);
+    Config                config{};
+    std::vector<uint16_t> magnitudesLookupTable = CreateLUT();
+    // std::vector<uint8_t>  data;
+    std::vector<uint16_t> magnitudeVector = std::vector<uint16_t>(BufferLength, 0xffff);
 
-    std::shared_ptr<TrafficManager> _trafficManager;
+    std::shared_ptr<TrafficManager> trafficManager;
 
     // DataRecorder<AirCraftImpl> _recorder;
-    std::mutex        _mutex;
-    std::atomic<bool> _stopRequested{false};
-    DeviceSelector    _selector;
-    RTLSDR            _listener1090;
-    uint8_t           _sourceId{1};
+    std::mutex        mutex;
+    std::atomic<bool> stopRequested{false};
+    DeviceSelector    selector;
+    RTLSDR            listener1090;
+    uint8_t           sourceId{1};
     /* Statistics */
-    long long _stat_valid_preamble{};
-    long long _stat_demodulated{};
-    long long _stat_goodcrc{};
-    long long _stat_badcrc{};
-    long long _stat_fixed{};
-    long long _stat_single_bit_fix{};
-    long long _stat_two_bits_fix{};
-    long long _stat_sbs_connections{};
-    long long _stat_out_of_phase{};
+    long long statValidPreamble{};
+    long long statDemodulated{};
+    long long statGoodcrc{};
+    long long statBadcrc{};
+    long long statFixed{};
+    long long statSingleBitFix{};
+    long long statTwoBitsFix{};
+    long long statSbsConnections{};
+    long long statOutOfPhase{};
 };
 
 /* ===================== Mode S detection and decoding  ===================== */
@@ -246,41 +258,39 @@ struct ADSB1090Handler : RTLSDR::IDataHandler
  * the CRC xored with the sender address as they are reply to interrogations,
  * but a casual listener can't split the address from the checksum.
  */
-static uint32_t modes_checksum_table[112]
-    = {0x3935ea, 0x1c9af5, 0xf1b77e, 0x78dbbf, 0xc397db, 0x9e31e9, 0xb0e2f0, 0x587178, 0x2c38bc, 0x161c5e, 0x0b0e2f, 0xfa7d13, 0x82c48d,
-       0xbe9842, 0x5f4c21, 0xd05c14, 0x682e0a, 0x341705, 0xe5f186, 0x72f8c3, 0xc68665, 0x9cb936, 0x4e5c9b, 0xd8d449, 0x939020, 0x49c810,
-       0x24e408, 0x127204, 0x093902, 0x049c81, 0xfdb444, 0x7eda22, 0x3f6d11, 0xe04c8c, 0x702646, 0x381323, 0xe3f395, 0x8e03ce, 0x4701e7,
-       0xdc7af7, 0x91c77f, 0xb719bb, 0xa476d9, 0xadc168, 0x56e0b4, 0x2b705a, 0x15b82d, 0xf52612, 0x7a9309, 0xc2b380, 0x6159c0, 0x30ace0,
-       0x185670, 0x0c2b38, 0x06159c, 0x030ace, 0x018567, 0xff38b7, 0x80665f, 0xbfc92b, 0xa01e91, 0xaff54c, 0x57faa6, 0x2bfd53, 0xea04ad,
-       0x8af852, 0x457c29, 0xdd4410, 0x6ea208, 0x375104, 0x1ba882, 0x0dd441, 0xf91024, 0x7c8812, 0x3e4409, 0xe0d800, 0x706c00, 0x383600,
-       0x1c1b00, 0x0e0d80, 0x0706c0, 0x038360, 0x01c1b0, 0x00e0d8, 0x00706c, 0x003836, 0x001c1b, 0xfff409, 0x000000, 0x000000, 0x000000,
-       0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000,
-       0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000};
+static constexpr auto ModesChecksumTable = std::array<uint32_t, 112>{
+    0x3935ea, 0x1c9af5, 0xf1b77e, 0x78dbbf, 0xc397db, 0x9e31e9, 0xb0e2f0, 0x587178, 0x2c38bc, 0x161c5e, 0x0b0e2f, 0xfa7d13, 0x82c48d,
+    0xbe9842, 0x5f4c21, 0xd05c14, 0x682e0a, 0x341705, 0xe5f186, 0x72f8c3, 0xc68665, 0x9cb936, 0x4e5c9b, 0xd8d449, 0x939020, 0x49c810,
+    0x24e408, 0x127204, 0x093902, 0x049c81, 0xfdb444, 0x7eda22, 0x3f6d11, 0xe04c8c, 0x702646, 0x381323, 0xe3f395, 0x8e03ce, 0x4701e7,
+    0xdc7af7, 0x91c77f, 0xb719bb, 0xa476d9, 0xadc168, 0x56e0b4, 0x2b705a, 0x15b82d, 0xf52612, 0x7a9309, 0xc2b380, 0x6159c0, 0x30ace0,
+    0x185670, 0x0c2b38, 0x06159c, 0x030ace, 0x018567, 0xff38b7, 0x80665f, 0xbfc92b, 0xa01e91, 0xaff54c, 0x57faa6, 0x2bfd53, 0xea04ad,
+    0x8af852, 0x457c29, 0xdd4410, 0x6ea208, 0x375104, 0x1ba882, 0x0dd441, 0xf91024, 0x7c8812, 0x3e4409, 0xe0d800, 0x706c00, 0x383600,
+    0x1c1b00, 0x0e0d80, 0x0706c0, 0x038360, 0x01c1b0, 0x00e0d8, 0x00706c, 0x003836, 0x001c1b, 0xfff409, 0x000000, 0x000000, 0x000000,
+    0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000,
+    0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000};
 
-static uint32_t modesChecksum(std::array<uint8_t, Message::LongMessageBytes> const& msg, size_t bits)
+static uint32_t ModesChecksum(std::array<uint8_t, Message::LongMessageBytes> const& msg, size_t bits)
 {
     uint32_t crc    = 0;
     size_t   offset = (bits == 112) ? 0u : (112u - 56u);
     for (size_t j = 0; j < bits; j++)
     {
-        auto    byte    = j / 8;
-        auto    bit     = j % 8;
-        uint8_t bitmask = static_cast<uint8_t>(1 << (7 - bit));
+        auto byte    = j / 8;
+        auto bit     = j % 8;
+        auto bitmask = static_cast<uint8_t>(1 << (7 - bit));
 
         /* If bit is set, xor with corresponding table entry. */
-        if (msg[byte] & bitmask) crc ^= modes_checksum_table[j + offset];
+        if ((msg[byte] & bitmask) != 0) { crc ^= ModesChecksumTable[j + offset]; }
     }
     return crc; /* 24 bit checksum. */
 }
 
 /* Given the Downlink Format (DF) of the message, return the message length
  * in bits. */
-static size_t modesMessageLenByType(int type)
+static size_t ModesMessageLenByType(int type)
 {
-    if (type == 16 || type == 17 || type == 19 || type == 20 || type == 21)
-        return Message::LongMessageBits;
-    else
-        return Message::ShortMessageBits;
+    if (type == 16 || type == 17 || type == 19 || type == 20 || type == 21) { return Message::LongMessageBits; }
+    return Message::ShortMessageBits;
 }
 
 /* Try to fix single bit errors using the checksum. On success modifies
@@ -303,7 +313,7 @@ static int FixSingleBitErrors(std::array<uint8_t, Message::LongMessageBytes>& ms
         aux[byte] ^= bitmask; /* Flip j-th bit. */    // NOLINT
 
         crc1 = (uint32_t{aux[(bits / 8) - 3]} << 16) | (uint32_t{aux[(bits / 8) - 2]} << 8) | uint32_t{aux[(bits / 8) - 1]};    // NOLINT
-        crc2 = modesChecksum(aux, bits);
+        crc2 = ModesChecksum(aux, bits);
 
         if (crc1 == crc2)
         {
@@ -347,7 +357,7 @@ static int FixTwoBitsErrors(std::array<uint8_t, Message::LongMessageBytes>& msg,
 
             crc1 = (static_cast<uint32_t>(aux[(bits / 8) - 3]) << 16) | (static_cast<uint32_t>(aux[(bits / 8) - 2]) << 8)    // NOLINT
                    | static_cast<uint32_t>(aux[(bits / 8) - 1]);
-            crc2 = modesChecksum(aux, bits);
+            crc2 = ModesChecksum(aux, bits);
 
             if (crc1 == crc2)
             {
@@ -383,7 +393,7 @@ static int FixTwoBitsErrors(std::array<uint8_t, Message::LongMessageBytes>& msg,
  * it returns 1. Otherwise 0 is returned. */
 int ADSB1090Handler::BruteForceAp(std::array<uint8_t, Message::LongMessageBytes> const& msg, Message& mm)
 {
-    std::array<uint8_t, Message::LongMessageBytes> aux;
+    std::array<uint8_t, Message::LongMessageBytes> aux{};
 
     int  msgtype = mm.msgtype;
     auto msgbits = mm.msgbits;
@@ -404,7 +414,7 @@ int ADSB1090Handler::BruteForceAp(std::array<uint8_t, Message::LongMessageBytes>
          * so that we recover the address, because:
          *
          * (ADDR xor CRC) xor CRC = ADDR. */
-        uint32_t crc = modesChecksum(aux, msgbits);
+        uint32_t crc = ModesChecksum(aux, msgbits);
         aux[lastbyte] ^= crc & 0xff;
         aux[lastbyte - 1] ^= (crc >> 8) & 0xff;
         aux[lastbyte - 2] ^= (crc >> 16) & 0xff;
@@ -426,30 +436,29 @@ int ADSB1090Handler::BruteForceAp(std::array<uint8_t, Message::LongMessageBytes>
 /* Decode the 13 bit AC altitude field (in DF 20 and others).
  * Returns the altitude, and set 'unit' to either MODES_UNIT_METERS
  * or MDOES_UNIT_FEETS. */
-static int decodeAC13Field(std::array<uint8_t, Message::LongMessageBytes> const& msg, int* unit)
+static int DecodeAC13Field(std::array<uint8_t, Message::LongMessageBytes> const& msg, int* unit)
 {
-    int m_bit = msg[3] & (1 << 6);
-    int q_bit = msg[3] & (1 << 4);
+    int mBit = msg[3] & (1 << 6);
+    int qBit = msg[3] & (1 << 4);
 
-    if (!m_bit)
+    if (mBit == 0)
     {
-        *unit = MODES_UNIT_FEET;
-        if (q_bit)
+        *unit = ModesUnitFeet;
+        if (qBit != 0)
         {
             /* N is the 11 bit integer resulting from the removal of bit
              * Q and M */
             int n = ((msg[2] & 31) << 6) | ((msg[3] & 0x80) >> 2) | ((msg[3] & 0x20) >> 1) | (msg[3] & 15);
             /* The final altitude is due to the resulting number multiplied
              * by 25, minus 1000. */
-            return n * 25 - 1000;
+            return (n * 25) - 1000;
         }
-        else
-        { /* TODO: Implement altitude where Q=0 and M=0 */
-        }
+
+        /* TODO: Implement altitude where Q=0 and M=0 */
     }
     else
     {
-        *unit = MODES_UNIT_METERS;
+        *unit = ModesUnitMeters;
         /* TODO: Implement altitude when meter unit is selected. */
     }
     return 0;
@@ -457,24 +466,22 @@ static int decodeAC13Field(std::array<uint8_t, Message::LongMessageBytes> const&
 
 /* Decode the 12 bit AC altitude field (in DF 17 and others).
  * Returns the altitude or 0 if it can't be decoded. */
-static int decodeAC12Field(std::array<uint8_t, Message::LongMessageBytes> const& msg, int* unit)
+static int DecodeAC12Field(std::array<uint8_t, Message::LongMessageBytes> const& msg, int* unit)
 {
-    int q_bit = msg[5] & 1;
+    int qBit = msg[5] & 1;
 
-    if (q_bit)
+    if (qBit != 0)
     {
         /* N is the 11 bit integer resulting from the removal of bit
          * Q */
-        *unit = MODES_UNIT_FEET;
+        *unit = ModesUnitFeet;
         int n = ((msg[5] >> 1) << 4) | ((msg[6] & 0xF0) >> 4);
         /* The final altitude is due to the resulting number multiplied
          * by 25, minus 1000. */
-        return n * 25 - 1000;
+        return (n * 25) - 1000;
     }
-    else
-    {
-        return 0;
-    }
+
+    return 0;
 }
 
 /* Decode a raw Mode S message demodulated as a stream of bytes by
@@ -484,34 +491,34 @@ Message ADSB1090Handler::DecodeModesMessage(std::array<uint8_t, Message::LongMes
 {
     Message     mm{};
     uint32_t    crc2{}; /* Computed CRC, used to verify the message CRC. */
-    char const* ais_charset = "?ABCDEFGHIJKLMNOPQRSTUVWXYZ????? ???????????????0123456789??????";
+    char const* aisCharset = "?ABCDEFGHIJKLMNOPQRSTUVWXYZ????? ???????????????0123456789??????";
 
     mm.msg = msgIn;
 
     /* Get the message type ASAP as other operations depend on this */
     mm.msgtype = mm.msg[0] >> 3; /* Downlink Format */
-    mm.msgbits = modesMessageLenByType(mm.msgtype);
+    mm.msgbits = ModesMessageLenByType(mm.msgtype);
 
     /* CRC is always the last three bytes. */
     mm.crc = (uint32_t{mm.msg[(mm.msgbits / 8) - 3]} << 16) | (uint32_t{mm.msg[(mm.msgbits / 8) - 2]} << 8)
              | uint32_t{mm.msg[(mm.msgbits / 8) - 1]};
-    crc2 = modesChecksum(mm.msg, mm.msgbits);
+    crc2 = ModesChecksum(mm.msg, mm.msgbits);
 
     /* Check CRC and fix single bit errors using the CRC when
      * possible (DF 11 and 17). */
     mm.errorbit = -1; /* No error */
-    mm.crcok    = (mm.crc == crc2);
+    mm.crcok    = static_cast<int>(mm.crc == crc2);
 
-    if (!mm.crcok && _config.fixErrors && (mm.msgtype == 11 || mm.msgtype == 17))
+    if ((mm.crcok == 0) && config.fixErrors && (mm.msgtype == 11 || mm.msgtype == 17))
     {
         if ((mm.errorbit = FixSingleBitErrors(mm.msg, mm.msgbits)) != -1)
         {
-            mm.crc   = modesChecksum(mm.msg, mm.msgbits);
+            mm.crc   = ModesChecksum(mm.msg, mm.msgbits);
             mm.crcok = 1;
         }
-        else if (_config.aggressive && mm.msgtype == 17 && (mm.errorbit = FixTwoBitsErrors(mm.msg, mm.msgbits)) != -1)
+        else if (config.aggressive && mm.msgtype == 17 && (mm.errorbit = FixTwoBitsErrors(mm.msg, mm.msgbits)) != -1)
         {
-            mm.crc   = modesChecksum(mm.msg, mm.msgbits);
+            mm.crc   = ModesChecksum(mm.msg, mm.msgbits);
             mm.crcok = 1;
         }
     }
@@ -587,7 +594,7 @@ Message ADSB1090Handler::DecodeModesMessage(std::array<uint8_t, Message::LongMes
     }
 
     /* Decode 13 bit altitude for DF0, DF4, DF16, DF20 */
-    if (mm.msgtype == 0 || mm.msgtype == 4 || mm.msgtype == 16 || mm.msgtype == 20) { mm.altitude = decodeAC13Field(mm.msg, &mm.unit); }
+    if (mm.msgtype == 0 || mm.msgtype == 4 || mm.msgtype == 16 || mm.msgtype == 20) { mm.altitude = DecodeAC13Field(mm.msg, &mm.unit); }
 
     /* Decode extended squitter specific stuff. */
     if (mm.msgtype == 17)
@@ -597,55 +604,55 @@ Message ADSB1090Handler::DecodeModesMessage(std::array<uint8_t, Message::LongMes
         if (mm.metype >= 1 && mm.metype <= 4)
         {
             /* AirCraftImpl Identification and Category */
-            mm.aircraft_type = mm.metype - 1;
-            mm.flight[0]     = ais_charset[mm.msg[5] >> 2];
-            mm.flight[1]     = ais_charset[((mm.msg[5] & 3) << 4) | (mm.msg[6] >> 4)];
-            mm.flight[2]     = ais_charset[((mm.msg[6] & 15) << 2) | (mm.msg[7] >> 6)];
-            mm.flight[3]     = ais_charset[mm.msg[7] & 63];
-            mm.flight[4]     = ais_charset[mm.msg[8] >> 2];
-            mm.flight[5]     = ais_charset[((mm.msg[8] & 3) << 4) | (mm.msg[9] >> 4)];
-            mm.flight[6]     = ais_charset[((mm.msg[9] & 15) << 2) | (mm.msg[10] >> 6)];
-            mm.flight[7]     = ais_charset[mm.msg[10] & 63];
-            mm.flight[8]     = '\0';
+            mm.aircraftType = mm.metype - 1;
+            mm.flight[0]    = aisCharset[mm.msg[5] >> 2];
+            mm.flight[1]    = aisCharset[((mm.msg[5] & 3) << 4) | (mm.msg[6] >> 4)];
+            mm.flight[2]    = aisCharset[((mm.msg[6] & 15) << 2) | (mm.msg[7] >> 6)];
+            mm.flight[3]    = aisCharset[mm.msg[7] & 63];
+            mm.flight[4]    = aisCharset[mm.msg[8] >> 2];
+            mm.flight[5]    = aisCharset[((mm.msg[8] & 3) << 4) | (mm.msg[9] >> 4)];
+            mm.flight[6]    = aisCharset[((mm.msg[9] & 15) << 2) | (mm.msg[10] >> 6)];
+            mm.flight[7]    = aisCharset[mm.msg[10] & 63];
+            mm.flight[8]    = '\0';
         }
         else if (mm.metype >= 9 && mm.metype <= 18)
         {
             /* Airborne position Message */
-            mm.fflag         = mm.msg[6] & (1 << 2);
-            mm.tflag         = mm.msg[6] & (1 << 3);
-            mm.altitude      = decodeAC12Field(mm.msg, &mm.unit);
-            mm.raw_latitude  = ((mm.msg[6] & 3) << 15) | (mm.msg[7] << 7) | (mm.msg[8] >> 1);
-            mm.raw_longitude = ((mm.msg[8] & 1) << 16) | (mm.msg[9] << 8) | mm.msg[10];
+            mm.fflag        = mm.msg[6] & (1 << 2);
+            mm.tflag        = mm.msg[6] & (1 << 3);
+            mm.altitude     = DecodeAC12Field(mm.msg, &mm.unit);
+            mm.rawLatitude  = ((mm.msg[6] & 3) << 15) | (mm.msg[7] << 7) | (mm.msg[8] >> 1);
+            mm.rawLongitude = ((mm.msg[8] & 1) << 16) | (mm.msg[9] << 8) | mm.msg[10];
         }
         else if (mm.metype == 19 && mm.mesub >= 1 && mm.mesub <= 4)
         {
             /* Airborne Velocity Message */
             if (mm.mesub == 1 || mm.mesub == 2)
             {
-                mm.ew_dir           = (mm.msg[5] & 4) >> 2;
-                mm.ew_velocity      = ((mm.msg[5] & 3) << 8) | mm.msg[6];
-                mm.ns_dir           = (mm.msg[7] & 0x80) >> 7;
-                mm.ns_velocity      = ((mm.msg[7] & 0x7f) << 3) | ((mm.msg[8] & 0xe0) >> 5);
-                mm.vert_rate_source = (mm.msg[8] & 0x10) >> 4;
-                mm.vert_rate_sign   = (mm.msg[8] & 0x8) >> 3;
-                mm.vert_rate        = ((mm.msg[8] & 7) << 6) | ((mm.msg[9] & 0xfc) >> 2);
+                mm.ewDir          = (mm.msg[5] & 4) >> 2;
+                mm.ewVelocity     = ((mm.msg[5] & 3) << 8) | mm.msg[6];
+                mm.nsDir          = (mm.msg[7] & 0x80) >> 7;
+                mm.nsVelocity     = ((mm.msg[7] & 0x7f) << 3) | ((mm.msg[8] & 0xe0) >> 5);
+                mm.vertRateSource = (mm.msg[8] & 0x10) >> 4;
+                mm.vertRateSign   = (mm.msg[8] & 0x8) >> 3;
+                mm.vertRate       = ((mm.msg[8] & 7) << 6) | ((mm.msg[9] & 0xfc) >> 2);
                 /* Compute velocity and angle from the two speed
                  * components. */
-                mm.velocity = static_cast<int>(sqrt(mm.ns_velocity * mm.ns_velocity + mm.ew_velocity * mm.ew_velocity));
-                if (mm.velocity)
+                mm.velocity = static_cast<int>(sqrt((mm.nsVelocity * mm.nsVelocity) + (mm.ewVelocity * mm.ewVelocity)));
+                if (mm.velocity != 0)
                 {
-                    int    ewv = mm.ew_velocity;
-                    int    nsv = mm.ns_velocity;
-                    double heading;
+                    int    ewv     = mm.ewVelocity;
+                    int    nsv     = mm.nsVelocity;
+                    double heading = 0;
 
-                    if (mm.ew_dir) ewv *= -1;
-                    if (mm.ns_dir) nsv *= -1;
+                    if (mm.ewDir != 0) { ewv *= -1; }
+                    if (mm.nsDir != 0) { nsv *= -1; }
                     heading = atan2(ewv, nsv);
 
                     /* Convert to degrees. */
                     mm.heading = static_cast<int>(heading * 360 / (M_PI * 2));
                     /* We don't want negative values but a 0-360 scale. */
-                    if (mm.heading < 0) mm.heading += 360;
+                    if (mm.heading < 0) { mm.heading += 360; }
                 }
                 else
                 {
@@ -654,8 +661,8 @@ Message ADSB1090Handler::DecodeModesMessage(std::array<uint8_t, Message::LongMes
             }
             else if (mm.mesub == 3 || mm.mesub == 4)
             {
-                mm.heading_is_valid = mm.msg[5] & (1 << 2);
-                mm.heading          = static_cast<int>((360.0 / 128) * (((mm.msg[5] & 3) << 5) | (mm.msg[6] >> 3)));
+                mm.headingIsValid = mm.msg[5] & (1 << 2);
+                mm.heading        = static_cast<int>((360.0 / 128) * (((mm.msg[5] & 3) << 5) | (mm.msg[6] >> 3)));
             }
         }
     }
@@ -669,7 +676,7 @@ Message ADSB1090Handler::DecodeModesMessage(std::array<uint8_t, Message::LongMes
  *
  * Note: this function will access m[-1], so the caller should make sure to
  * call it only if we are not at the start of the current buffer. */
-static int detectOutOfPhase(uint16_t const* m)
+static int DetectOutOfPhase(uint16_t const* m)
 {
     if (m[3] > m[2] / 3) { return 1; }
     if (m[10] > m[9] / 3) { return 1; }
@@ -706,7 +713,7 @@ static int detectOutOfPhase(uint16_t const* m)
  * it will be more likely to detect a one because of the transformation.
  * In this way similar levels will be interpreted more likely in the
  * correct way. */
-static void applyPhaseCorrection(uint16_t* m)
+static void ApplyPhaseCorrection(uint16_t* m)
 {
     m += 16; /* Skip preamble. */
     for (size_t j = 0; j < (Message::LongMessageBits - 1) * 2; j += 2)
@@ -731,12 +738,12 @@ void ADSB1090Handler::DetectModeS(std::span<uint16_t> const& m)
 {
     auto mlen = m.size();
 
-    std::array<uint8_t, Message::LongMessageBytes>      bits;
-    std::array<uint8_t, Message::LongMessageBytes>      msg;
-    std::array<uint16_t, Message::LongMessageBytes * 2> aux;
+    std::array<uint8_t, Message::LongMessageBytes>      bits{};
+    std::array<uint8_t, Message::LongMessageBytes>      msg{};
+    std::array<uint16_t, Message::LongMessageBytes * 2> aux{};
 
-    uint32_t j;
-    int      use_correction = 0;
+    uint32_t j             = 0;
+    int      useCorrection = 0;
 
     /* The Mode S preamble is made of impulses of 0.5 microseconds at
      * the following time offsets:
@@ -761,18 +768,21 @@ void ADSB1090Handler::DetectModeS(std::span<uint16_t> const& m)
      * 8   --
      * 9   -------------------
      */
-    for (j = 0; j < mlen - MODES_FULL_LEN * 2; j++)
+    for (j = 0; j < mlen - (MODES_FULL_LEN * 2); j++)
     {
-        int low, high, delta, errors;
-        int good_message = 0;
+        int low         = 0;
+        int high        = 0;
+        int delta       = 0;
+        int errors      = 0;
+        int goodMessage = 0;
 
-        if (use_correction) goto good_preamble; /* We already checked it. */
+        if (useCorrection != 0) { goto good_preamble; /* We already checked it. */ }
 
         /* First check of relations between the first 10 samples
          * representing a valid preamble. We don't even investigate further
          * if this simple test is not passed. */
-        if (!(m[j] > m[j + 1] && m[j + 1] < m[j + 2] && m[j + 2] > m[j + 3] && m[j + 3] < m[j] && m[j + 4] < m[j] && m[j + 5] < m[j]
-              && m[j + 6] < m[j] && m[j + 7] > m[j + 8] && m[j + 8] < m[j + 9] && m[j + 9] > m[j + 6]))
+        if (m[j] <= m[j + 1] || m[j + 1] >= m[j + 2] || m[j + 2] <= m[j + 3] || m[j + 3] >= m[j] || m[j + 4] >= m[j] || m[j + 5] >= m[j]
+            || m[j + 6] >= m[j] || m[j + 7] <= m[j + 8] || m[j + 8] >= m[j + 9] || m[j + 9] <= m[j + 6])
         {
             // if (Modes.debug & MODES_DEBUG_NOPREAMBLE && m[j] > MODES_DEBUG_NOPREAMBLE_LEVEL)
             // dumpRawMessage("Unexpected ratio among first 10 samples", msg, m, j);
@@ -784,7 +794,7 @@ void ADSB1090Handler::DetectModeS(std::span<uint16_t> const& m)
          * the high levels as signals can be out of phase so part of the
          * energy can be in the near samples. */
         high = (m[j] + m[j + 2] + m[j + 7] + m[j + 9]) / 6;
-        if (m[j + 4] >= high || m[j + 5] >= high)
+        if (std::cmp_greater_equal(m[j + 4], high) || std::cmp_greater_equal(m[j + 5], high))
         {
             // if (Modes.debug & MODES_DEBUG_NOPREAMBLE && m[j] > MODES_DEBUG_NOPREAMBLE_LEVEL)
             //    dumpRawMessage("Too high level in samples between 3 and 6", msg, m, j);
@@ -794,25 +804,26 @@ void ADSB1090Handler::DetectModeS(std::span<uint16_t> const& m)
         /* Similarly samples in the range 11-14 must be low, as it is the
          * space between the preamble and real data. Again we don't test
          * bits too near to high levels, see above. */
-        if (m[j + 11] >= high || m[j + 12] >= high || m[j + 13] >= high || m[j + 14] >= high)
+        if (std::cmp_greater_equal(m[j + 11], high) || std::cmp_greater_equal(m[j + 12], high) || std::cmp_greater_equal(m[j + 13], high)
+            || std::cmp_greater_equal(m[j + 14], high))
         {
             // if (Modes.debug & MODES_DEBUG_NOPREAMBLE && m[j] > MODES_DEBUG_NOPREAMBLE_LEVEL)
             //    dumpRawMessage("Too high level in samples between 10 and 15", msg, m, j);
             continue;
         }
-        _stat_valid_preamble++;
+        statValidPreamble++;
 
     good_preamble:
         /* If the previous attempt with this message failed, retry using
          * magnitude correction. */
-        if (use_correction)
+        if (useCorrection != 0)
         {
             std::copy_n(m.begin() + j + MODES_PREAMBLE_US * 2, sizeof(aux), aux.begin());
             // memcpy(aux, m +, sizeof(aux));
-            if (j && detectOutOfPhase(m.data() + j))
+            if ((j != 0u) && (DetectOutOfPhase(m.data() + j) != 0))
             {
-                applyPhaseCorrection(m.data() + j);
-                _stat_out_of_phase++;
+                ApplyPhaseCorrection(m.data() + j);
+                statOutOfPhase++;
             }
             /* TODO ... apply other kind of corrections. */
         }
@@ -822,19 +833,19 @@ void ADSB1090Handler::DetectModeS(std::span<uint16_t> const& m)
         errors = 0;
         for (uint32_t i = 0; i < Message::LongMessageBits * 2; i += 2)
         {
-            low   = m[j + i + MODES_PREAMBLE_US * 2];
-            high  = m[j + i + MODES_PREAMBLE_US * 2 + 1];
+            low   = m[j + i + (MODES_PREAMBLE_US * 2)];
+            high  = m[j + i + (MODES_PREAMBLE_US * 2) + 1];
             delta = low - high;
-            if (delta < 0) delta = -delta;
+            if (delta < 0) { delta = -delta; }
 
-            if (i > 0 && delta < 256) { bits[i / 2] = bits[i / 2 - 1]; }
+            if (i > 0 && delta < 256) { bits[i / 2] = bits[(i / 2) - 1]; }
             else if (low == high)
             {
                 /* Checking if two adiacent samples have the same magnitude
                  * is an effective way to detect if it's just random noise
                  * that was detected as a valid preamble. */
                 bits[i / 2] = 2; /* error */
-                if (i < Message::ShortMessageBits * 2) errors++;
+                if (i < Message::ShortMessageBits * 2) { errors++; }
             }
             else if (low > high) { bits[i / 2] = 1; }
             else
@@ -845,7 +856,7 @@ void ADSB1090Handler::DetectModeS(std::span<uint16_t> const& m)
         }
 
         /* Restore the original message if we used magnitude correction. */
-        if (use_correction) { memcpy(m.data() + j + MODES_PREAMBLE_US * 2, aux.data(), sizeof(aux)); }
+        if (useCorrection != 0) { memcpy(m.data() + j + (MODES_PREAMBLE_US * 2), aux.data(), sizeof(aux)); }
 
         /* Pack bits into bytes */
         for (size_t i = 0; i < Message::LongMessageBits; i += 8)
@@ -855,14 +866,14 @@ void ADSB1090Handler::DetectModeS(std::span<uint16_t> const& m)
         }
 
         int      msgtype = msg[0] >> 3;
-        uint32_t msglen  = static_cast<uint32_t>(modesMessageLenByType(msgtype)) / 8;
+        uint32_t msglen  = static_cast<uint32_t>(ModesMessageLenByType(msgtype)) / 8;
 
         /* Last check, high and low bits are different enough in magnitude
          * to mark this as real message and not just noise? */
         delta = 0;
         for (size_t i = 0; i < msglen * 8 * 2; i += 2)
         {
-            delta += abs(m[j + i + MODES_PREAMBLE_US * 2] - m[j + i + MODES_PREAMBLE_US * 2 + 1]);
+            delta += abs(m[j + i + (MODES_PREAMBLE_US * 2)] - m[j + i + (MODES_PREAMBLE_US * 2) + 1]);
         }
         delta /= msglen * 4;
 
@@ -871,38 +882,40 @@ void ADSB1090Handler::DetectModeS(std::span<uint16_t> const& m)
          * random noise. */
         if (delta < 10 * 255)
         {
-            use_correction = 0;
+            useCorrection = 0;
             continue;
         }
 
         /* If we reached this point, and error is zero, we are very likely
          * with a Mode S message in our hands, but it may still be broken
          * and CRC may not be correct. This is handled by the next layer. */
-        if (errors == 0 || (_config.aggressive && errors < 3))
+        if (errors == 0 || (config.aggressive && errors < 3))
         {
             Message mm = DecodeModesMessage(msg);
 
             /* Decode the received message and update statistics */
 
             /* Update statistics. */
-            if (mm.crcok || use_correction)
+            if ((mm.crcok != 0) || (useCorrection != 0))
             {
-                if (errors == 0) _stat_demodulated++;
+                if (errors == 0) { statDemodulated++; }
                 if (mm.errorbit == -1)
                 {
-                    if (mm.crcok)
-                        _stat_goodcrc++;
+                    if (mm.crcok != 0) { statGoodcrc++; }
                     else
-                        _stat_badcrc++;
+                    {
+                        statBadcrc++;
+                    }
                 }
                 else
                 {
-                    _stat_badcrc++;
-                    _stat_fixed++;
-                    if (mm.errorbit < static_cast<int>(Message::LongMessageBits))
-                        _stat_single_bit_fix++;
+                    statBadcrc++;
+                    statFixed++;
+                    if (std::cmp_less(mm.errorbit, Message::LongMessageBits)) { statSingleBitFix++; }
                     else
-                        _stat_two_bits_fix++;
+                    {
+                        statTwoBitsFix++;
+                    }
                 }
             }
 #if 0
@@ -919,19 +932,19 @@ void ADSB1090Handler::DetectModeS(std::span<uint16_t> const& m)
 #endif
 
             /* Skip this message if we are sure it's fine. */
-            if (mm.crcok)
+            if (mm.crcok != 0)
             {
                 j += (MODES_PREAMBLE_US + (msglen * 8)) * 2;
-                good_message = 1;
-                if (use_correction) mm.phaseCorrected = 1;
+                goodMessage = 1;
+                if (useCorrection != 0) { mm.phaseCorrected = 1; }
             }
 
             /* Pass data to the next layer */
-            UseModesMessage(&mm);
+            UseModesMessage(mm);
         }
         else
         {
-            if (_config.debug && use_correction)
+            if (config.debug && (useCorrection != 0))
             {
                 // printf("The following message has %d demod errors\n", errors);
                 // dumpRawMessage("Demodulated with errors", msg, m, j);
@@ -939,14 +952,14 @@ void ADSB1090Handler::DetectModeS(std::span<uint16_t> const& m)
         }
 
         /* Retry with phase correction if possible. */
-        if (!good_message && !use_correction)
+        if ((goodMessage == 0) && (useCorrection == 0))
         {
             j--;
-            use_correction = 1;
+            useCorrection = 1;
         }
         else
         {
-            use_correction = 0;
+            useCorrection = 0;
         }
     }
 }
@@ -958,9 +971,9 @@ void ADSB1090Handler::DetectModeS(std::span<uint16_t> const& m)
  *
  * Basically this function passes a raw message to the upper layers for
  * further processing and visualization. */
-void ADSB1090Handler::UseModesMessage(Message* mm)
+void ADSB1090Handler::UseModesMessage(Message const& mm)
 {
-    if (_config.checkCRC && mm->crcok == 0) { return; }
+    if (config.checkCRC && mm.crcok == 0) { return; }
     InteractiveReceiveData(mm);
     // uint32_t addr = (static_cast<uint32_t>(mm->aa1) << 16) | (static_cast<uint32_t>(mm->aa2) << 8) | static_cast<uint32_t>(mm->aa3);
     //_modesSendSBSOutput(mm, _interactiveFindOrCreateAircraft(addr)); /* Feed SBS output clients. */
@@ -972,92 +985,90 @@ void ADSB1090Handler::UseModesMessage(Message* mm)
  * of aircrafts. */
 AirCraftImpl& ADSB1090Handler::InteractiveFindOrCreateAircraft(uint32_t addr)
 {
-    return _trafficManager->FindOrCreate(addr);
+    return trafficManager->FindOrCreate(addr);
 }
 
 /* Always positive MOD operation, used for CPR decoding. */
-static int cprModFunction(int a, int b)
+static int CprModFunction(int a, int b)
 {
     int res = a % b;
-    if (res < 0) res += b;
+    if (res < 0) { res += b; }
     return res;
 }
 /* The NL function uses the precomputed table from 1090-WP-9-14 */
-static int cprNLFunction(double lat)
+static int CprNlFunction(double lat)    // NOLINT
 {
-    if (lat < 0) lat = -lat; /* Table is simmetric about the equator. */
-    if (lat < 10.47047130) return 59;
-    if (lat < 14.82817437) return 58;
-    if (lat < 18.18626357) return 57;
-    if (lat < 21.02939493) return 56;
-    if (lat < 23.54504487) return 55;
-    if (lat < 25.82924707) return 54;
-    if (lat < 27.93898710) return 53;
-    if (lat < 29.91135686) return 52;
-    if (lat < 31.77209708) return 51;
-    if (lat < 33.53993436) return 50;
-    if (lat < 35.22899598) return 49;
-    if (lat < 36.85025108) return 48;
-    if (lat < 38.41241892) return 47;
-    if (lat < 39.92256684) return 46;
-    if (lat < 41.38651832) return 45;
-    if (lat < 42.80914012) return 44;
-    if (lat < 44.19454951) return 43;
-    if (lat < 45.54626723) return 42;
-    if (lat < 46.86733252) return 41;
-    if (lat < 48.16039128) return 40;
-    if (lat < 49.42776439) return 39;
-    if (lat < 50.67150166) return 38;
-    if (lat < 51.89342469) return 37;
-    if (lat < 53.09516153) return 36;
-    if (lat < 54.27817472) return 35;
-    if (lat < 55.44378444) return 34;
-    if (lat < 56.59318756) return 33;
-    if (lat < 57.72747354) return 32;
-    if (lat < 58.84763776) return 31;
-    if (lat < 59.95459277) return 30;
-    if (lat < 61.04917774) return 29;
-    if (lat < 62.13216659) return 28;
-    if (lat < 63.20427479) return 27;
-    if (lat < 64.26616523) return 26;
-    if (lat < 65.31845310) return 25;
-    if (lat < 66.36171008) return 24;
-    if (lat < 67.39646774) return 23;
-    if (lat < 68.42322022) return 22;
-    if (lat < 69.44242631) return 21;
-    if (lat < 70.45451075) return 20;
-    if (lat < 71.45986473) return 19;
-    if (lat < 72.45884545) return 18;
-    if (lat < 73.45177442) return 17;
-    if (lat < 74.43893416) return 16;
-    if (lat < 75.42056257) return 15;
-    if (lat < 76.39684391) return 14;
-    if (lat < 77.36789461) return 13;
-    if (lat < 78.33374083) return 12;
-    if (lat < 79.29428225) return 11;
-    if (lat < 80.24923213) return 10;
-    if (lat < 81.19801349) return 9;
-    if (lat < 82.13956981) return 8;
-    if (lat < 83.07199445) return 7;
-    if (lat < 83.99173563) return 6;
-    if (lat < 84.89166191) return 5;
-    if (lat < 85.75541621) return 4;
-    if (lat < 86.53536998) return 3;
-    if (lat < 87.00000000)
-        return 2;
-    else
-        return 1;
+    if (lat < 0) { lat = -lat; /* Table is simmetric about the equator. */ }
+    if (lat < 10.47047130) { return 59; }
+    if (lat < 14.82817437) { return 58; }
+    if (lat < 18.18626357) { return 57; }
+    if (lat < 21.02939493) { return 56; }
+    if (lat < 23.54504487) { return 55; }
+    if (lat < 25.82924707) { return 54; }
+    if (lat < 27.93898710) { return 53; }
+    if (lat < 29.91135686) { return 52; }
+    if (lat < 31.77209708) { return 51; }
+    if (lat < 33.53993436) { return 50; }
+    if (lat < 35.22899598) { return 49; }
+    if (lat < 36.85025108) { return 48; }
+    if (lat < 38.41241892) { return 47; }
+    if (lat < 39.92256684) { return 46; }
+    if (lat < 41.38651832) { return 45; }
+    if (lat < 42.80914012) { return 44; }
+    if (lat < 44.19454951) { return 43; }
+    if (lat < 45.54626723) { return 42; }
+    if (lat < 46.86733252) { return 41; }
+    if (lat < 48.16039128) { return 40; }
+    if (lat < 49.42776439) { return 39; }
+    if (lat < 50.67150166) { return 38; }
+    if (lat < 51.89342469) { return 37; }
+    if (lat < 53.09516153) { return 36; }
+    if (lat < 54.27817472) { return 35; }
+    if (lat < 55.44378444) { return 34; }
+    if (lat < 56.59318756) { return 33; }
+    if (lat < 57.72747354) { return 32; }
+    if (lat < 58.84763776) { return 31; }
+    if (lat < 59.95459277) { return 30; }
+    if (lat < 61.04917774) { return 29; }
+    if (lat < 62.13216659) { return 28; }
+    if (lat < 63.20427479) { return 27; }
+    if (lat < 64.26616523) { return 26; }
+    if (lat < 65.31845310) { return 25; }
+    if (lat < 66.36171008) { return 24; }
+    if (lat < 67.39646774) { return 23; }
+    if (lat < 68.42322022) { return 22; }
+    if (lat < 69.44242631) { return 21; }
+    if (lat < 70.45451075) { return 20; }
+    if (lat < 71.45986473) { return 19; }
+    if (lat < 72.45884545) { return 18; }
+    if (lat < 73.45177442) { return 17; }
+    if (lat < 74.43893416) { return 16; }
+    if (lat < 75.42056257) { return 15; }
+    if (lat < 76.39684391) { return 14; }
+    if (lat < 77.36789461) { return 13; }
+    if (lat < 78.33374083) { return 12; }
+    if (lat < 79.29428225) { return 11; }
+    if (lat < 80.24923213) { return 10; }
+    if (lat < 81.19801349) { return 9; }
+    if (lat < 82.13956981) { return 8; }
+    if (lat < 83.07199445) { return 7; }
+    if (lat < 83.99173563) { return 6; }
+    if (lat < 84.89166191) { return 5; }
+    if (lat < 85.75541621) { return 4; }
+    if (lat < 86.53536998) { return 3; }
+    if (lat < 87.00000000) { return 2; }
+    return 1;
 }
-static int cprNFunction(double lat, int isodd)
+static int CprNFunction(double lat, int isodd)
 {
-    int nl = cprNLFunction(lat) - isodd;
-    if (nl < 1) nl = 1;
+    int nl = CprNlFunction(lat) - isodd;
+    nl     = std::max(nl, 1);
     return nl;
 }
 
-static double cprDlonFunction(double lat, int isodd)
+static double CprDlonFunction(double lat, int isodd)
 {
-    return 360.0 / cprNFunction(lat, isodd);
+    return 360.0 / CprNFunction(lat, isodd);
 }
 
 /* This algorithm comes from:
@@ -1071,10 +1082,10 @@ static double cprDlonFunction(double lat, int isodd)
  *    seconds.
  */
 
-static void decodeCPR(AirCraftImpl& a)
+static void DecodeCpr(AirCraftImpl& a)
 {
-    double       AirDlat0 = 360.0 / 60;
-    double const AirDlat1 = 360.0 / 59;
+    double       airDlat0 = 360.0 / 60;
+    double const airDlat1 = 360.0 / 59;
     double       lat0     = a.cpr_even_lat;
     double       lat1     = a.cpr_odd_lat;
     double       lon0     = a.cpr_even_lon;
@@ -1082,32 +1093,33 @@ static void decodeCPR(AirCraftImpl& a)
 
     /* Compute the Latitude Index "j" */
     int    j     = static_cast<int>(floor(((59 * lat0 - 60 * lat1) / 131072) + 0.5));
-    double rlat0 = AirDlat0 * (cprModFunction(j, 60) + lat0 / 131072);
-    double rlat1 = AirDlat1 * (cprModFunction(j, 59) + lat1 / 131072);
+    double rlat0 = airDlat0 * (CprModFunction(j, 60) + lat0 / 131072);
+    double rlat1 = airDlat1 * (CprModFunction(j, 59) + lat1 / 131072);
 
-    if (rlat0 >= 270) rlat0 -= 360;
-    if (rlat1 >= 270) rlat1 -= 360;
+    if (rlat0 >= 270) { rlat0 -= 360; }
+    if (rlat1 >= 270) { rlat1 -= 360; }
 
     /* Check that both are in the same latitude zone, or abort. */
-    if (cprNLFunction(rlat0) != cprNLFunction(rlat1)) return;
+    if (CprNlFunction(rlat0) != CprNlFunction(rlat1)) { return; }
 
-    double lat1E7, lon1E7;
+    double lat1E7 = 0.;
+    double lon1E7 = 0.;
     /* Compute ni and the longitude index m */
     if (a.cpr_even_time > a.cpr_odd_time)
     {
         /* Use even packet. */
-        int ni = cprNFunction(rlat0, 0);
-        int m  = static_cast<int>(floor((((lon0 * (cprNLFunction(rlat0) - 1)) - (lon1 * cprNLFunction(rlat0))) / 131072) + 0.5));
-        lon1E7 = (cprDlonFunction(rlat0, 0) * (cprModFunction(m, ni) + lon0 / 131072) * 10000000);
+        int ni = CprNFunction(rlat0, 0);
+        int m  = static_cast<int>(floor((((lon0 * (CprNlFunction(rlat0) - 1)) - (lon1 * CprNlFunction(rlat0))) / 131072) + 0.5));
+        lon1E7 = (CprDlonFunction(rlat0, 0) * (CprModFunction(m, ni) + lon0 / 131072) * 10000000);
         lat1E7 = (double{rlat0 * 10000000});
     }
     else
     {
         /* Use odd packet. */
-        int ni = cprNFunction(rlat1, 1);
-        int m  = static_cast<int>(floor((((lon0 * (cprNLFunction(rlat1) - 1)) - (lon1 * cprNLFunction(rlat1))) / 131072.0) + 0.5));
-        lon1E7 = (cprDlonFunction(rlat1, 1) * (cprModFunction(m, ni) + lon1 / 131072) * 10000000);
-        lat1E7 = (double{rlat1} * 10000000);
+        int ni = CprNFunction(rlat1, 1);
+        int m  = static_cast<int>(floor((((lon0 * (CprNlFunction(rlat1) - 1)) - (lon1 * CprNlFunction(rlat1))) / 131072.0) + 0.5));
+        lon1E7 = (CprDlonFunction(rlat1, 1) * (CprModFunction(m, ni) + lon1 / 131072) * 10000000);
+        lat1E7 = (rlat1 * 10000000);
     }
     if (lon1E7 > 180 * 10000000) { lon1E7 -= 3600000000; }
     a.lat1E7 = static_cast<int32_t>(lat1E7);
@@ -1115,9 +1127,9 @@ static void decodeCPR(AirCraftImpl& a)
 }
 
 /* Receive new messages and populate the interactive mode with more info. */
-AirCraftImpl& ADSB1090Handler::InteractiveReceiveData(Message* mm)
+inline AirCraftImpl& ADSB1090Handler::InteractiveReceiveData(Message const& mm)
 {
-    uint32_t addr = static_cast<uint32_t>((mm->aa1 << 16) | (mm->aa2 << 8) | mm->aa3);
+    auto addr = static_cast<uint32_t>((mm.aa1 << 16) | (mm.aa2 << 8) | mm.aa3);
 
     auto  now = std::chrono::system_clock::now();
     auto& a   = InteractiveFindOrCreateAircraft(addr);
@@ -1147,48 +1159,48 @@ AirCraftImpl& ADSB1090Handler::InteractiveReceiveData(Message* mm)
     locctx.set_seen(now);
     // a.set_messageCount(int32_t{a.messageCount() + 1});
 #endif
-    a.sourceId = _sourceId;
-    if (mm->msgtype == 0 || mm->msgtype == 4 || mm->msgtype == 20)
+    a.sourceId = sourceId;
+    if (mm.msgtype == 0 || mm.msgtype == 4 || mm.msgtype == 20)
     {
-        a.altitude = (static_cast<int32_t>(mm->altitude));
+        a.altitude = (static_cast<int32_t>(mm.altitude));
 
-        // locctx.set_altitude(int32_t{mm->altitude});
+        // locctx.set_altitude(int32_t{mm.altitude});
     }
-    else if (mm->msgtype == 17)
+    else if (mm.msgtype == 17)
     {
-        if (mm->metype >= 1 && mm->metype <= 4)
+        if (mm.metype >= 1 && mm.metype <= 4)
         {
-            std::copy(std::begin(mm->flight), std::end(mm->flight), std::begin(a.callsign));
-            //    memcpy(a.flight().data(), mm->flight, a.flight().size());
+            std::ranges::copy(mm.flight, std::begin(a.callsign));
+            //    memcpy(a.flight().data(), mm.flight, a.flight().size());
         }
-        else if (mm->metype >= 9 && mm->metype <= 18)
+        else if (mm.metype >= 9 && mm.metype <= 18)
         {
-            a.altitude = (static_cast<int32_t>(mm->altitude));
-            if (mm->fflag)
+            a.altitude = (static_cast<int32_t>(mm.altitude));
+            if (mm.fflag != 0)
             {
-                a.cpr_odd_lat  = (int32_t{mm->raw_latitude});
-                a.cpr_odd_lon  = (int32_t{mm->raw_longitude});
+                a.cpr_odd_lat  = (int32_t{mm.rawLatitude});
+                a.cpr_odd_lon  = (int32_t{mm.rawLongitude});
                 a.cpr_odd_time = (decltype(now){now});
             }
             else
             {
-                a.cpr_even_lat  = (int32_t{mm->raw_latitude});
-                a.cpr_even_lon  = (int32_t{mm->raw_longitude});
+                a.cpr_even_lat  = (int32_t{mm.rawLatitude});
+                a.cpr_even_lon  = (int32_t{mm.rawLongitude});
                 a.cpr_even_time = (decltype(now){now});
             }
             /* If the two data is less than 10 seconds apart, compute
              * the position. */
             if (std::abs(std::chrono::duration_cast<std::chrono::seconds>(a.cpr_even_time - a.cpr_odd_time).count()) <= 10)
             {
-                decodeCPR(a);
+                DecodeCpr(a);
             }
         }
-        else if (mm->metype == 19)
+        else if (mm.metype == 19)
         {
-            if (mm->mesub == 1 || mm->mesub == 2)
+            if (mm.mesub == 1 || mm.mesub == 2)
             {
-                a.speed = static_cast<uint32_t>(mm->velocity);
-                a.track = static_cast<uint32_t>(mm->heading);
+                a.speed = static_cast<uint32_t>(mm.velocity);
+                a.track = static_cast<uint32_t>(mm.heading);
             }
         }
     }
@@ -1214,7 +1226,7 @@ AirCraftImpl& ADSB1090Handler::InteractiveReceiveData(Message* mm)
     //   handler->OnTrafficUpdate(lock, a);
     //}
 #endif
-    _trafficManager->NotifyChanged(a);
+    trafficManager->NotifyChanged(a);
     return a;
 }
 
