@@ -13,30 +13,12 @@ SUPPRESS_STL_WARNINGS
 #include <utility>
 #include <vector>
 SUPPRESS_WARNINGS_END
+// NOLINTBEGIN
 
 // NOLINTBEGIN(readability-magic-numbers)
 // NOLINTBEGIN(readability-function-cognitive-complexity)
 // NOLINTBEGIN(cppcoreguidelines-pro-bounds-constant-array-index)
 
-enum
-{
-    MODES_PREAMBLE_US = 8 /* microseconds */
-};
-
-#define MODES_FULL_LEN (MODES_PREAMBLE_US + Message::LongMessageBits)
-
-enum
-{
-    ModesIcaoCacheTtl = 60, /* Time to live of cached addresses. */
-    ModesUnitFeet     = 0,
-    ModesUnitMeters   = 1
-};
-
-// #define MODES_DEBUG_DEMOD (1 << 0)
-enum
-{
-    ModesDebugDemoderr = (1 << 1)
-};
 // #define MODES_DEBUG_BADCRC (1 << 2)
 // #define MODES_DEBUG_GOODCRC (1 << 3)
 // #define MODES_DEBUG_NOPREAMBLE (1 << 4)
@@ -55,6 +37,18 @@ struct Message
 
     static constexpr size_t ShortMessageBits  = 56;
     static constexpr size_t ShortMessageBytes = ShortMessageBits / 8;
+
+    enum class ModeSUnit : uint8_t
+    {
+        Feet   = 0,
+        Meters = 1
+    };
+
+    // #define MODES_DEBUG_DEMOD (1 << 0)
+    // enum class
+    //{
+    //    ModesDebugDemoderr = (1 << 1)
+    //};
 
     /* Generic fields */
     std::array<uint8_t, LongMessageBytes> msg; /* Binary message. */
@@ -99,7 +93,8 @@ struct Message
     int identity; /* 13 bits identity (Squawk). */
 
     /* Fields used by multiple message types. */
-    int altitude, unit;
+    int       altitude;
+    ModeSUnit unit;
 };
 
 struct ADSB1090Handler : RTLSDR::IDataHandler, ADSB::IDataProvider
@@ -183,7 +178,7 @@ struct ADSB1090Handler : RTLSDR::IDataHandler, ADSB::IDataProvider
 
     void Start(ADSB::IListener& /*listener*/) override { listener1090.Start(this); }
     void Stop() override { listener1090.Stop(); }
-    void NotifySelfLocation(ADSB::IAirCraft const&) override {}
+    void NotifySelfLocation(ADSB::IAirCraft const& /*unused*/) override {}
 
     /* Add the specified entry to the cache of recently seen ICAO addresses.
      * Note that we also add a timestamp so that we can make sure that the
@@ -195,11 +190,13 @@ struct ADSB1090Handler : RTLSDR::IDataHandler, ADSB::IDataProvider
      * seconds ago. Otherwise returns 0. */
     bool IcaoAddressWasRecentlySeen(uint32_t addr)
     {
+        static constexpr long ModesIcaoCacheTtlInSecs = 60;
+
         auto it = icaoTimestamps.find(addr);
         return it != icaoTimestamps.end()
-               && (std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now() - it->second).count()
-                   <= ModesIcaoCacheTtl);
+               && (std::chrono::system_clock::now() - it->second) <= std::chrono::seconds{ModesIcaoCacheTtlInSecs};
     }
+
     int                 BruteForceAp(std::array<uint8_t, Message::LongMessageBytes> const& msg, Message& mm);
     Message             DecodeModesMessage(std::array<uint8_t, Message::LongMessageBytes> const& msgIn);
     void                DetectModeS(std::span<uint16_t> const& m);
@@ -380,7 +377,7 @@ static inline int FixTwoBitsErrors(std::array<uint8_t, Message::LongMessageBytes
  * the address XOR checksum field in the message. This will recover the
  * address: if we found it in our cache, we can assume the message is ok.
  *
- * This function expects mm->msgtype and mm->msgbits to be correctly
+ * This function expects mm.msgtype and mm.msgbits to be correctly
  * populated by the caller.
  *
  * On success the correct ICAO address is stored in the modesMessage
@@ -433,14 +430,14 @@ inline int ADSB1090Handler::BruteForceAp(std::array<uint8_t, Message::LongMessag
 /* Decode the 13 bit AC altitude field (in DF 20 and others).
  * Returns the altitude, and set 'unit' to either MODES_UNIT_METERS
  * or MDOES_UNIT_FEETS. */
-inline int DecodeAC13Field(std::array<uint8_t, Message::LongMessageBytes> const& msg, int* unit)
+static inline int DecodeAC13Field(std::array<uint8_t, Message::LongMessageBytes> const& msg, Message::ModeSUnit& unit)
 {
     int mBit = msg[3] & (1 << 6);
     int qBit = msg[3] & (1 << 4);
 
     if (mBit == 0)
     {
-        *unit = ModesUnitFeet;
+        unit = Message::ModeSUnit::Feet;
         if (qBit != 0)
         {
             /* N is the 11 bit integer resulting from the removal of bit
@@ -455,7 +452,7 @@ inline int DecodeAC13Field(std::array<uint8_t, Message::LongMessageBytes> const&
     }
     else
     {
-        *unit = ModesUnitMeters;
+        unit = Message::ModeSUnit::Meters;
         /* TODO: Implement altitude when meter unit is selected. */
     }
     return 0;
@@ -463,7 +460,7 @@ inline int DecodeAC13Field(std::array<uint8_t, Message::LongMessageBytes> const&
 
 /* Decode the 12 bit AC altitude field (in DF 17 and others).
  * Returns the altitude or 0 if it can't be decoded. */
-inline int DecodeAC12Field(std::array<uint8_t, Message::LongMessageBytes> const& msg, int* unit)
+static inline int DecodeAC12Field(std::array<uint8_t, Message::LongMessageBytes> const& msg, Message::ModeSUnit& unit)
 {
     int qBit = msg[5] & 1;
 
@@ -471,7 +468,7 @@ inline int DecodeAC12Field(std::array<uint8_t, Message::LongMessageBytes> const&
     {
         /* N is the 11 bit integer resulting from the removal of bit
          * Q */
-        *unit = ModesUnitFeet;
+        unit  = Message::ModeSUnit::Feet;
         int n = ((msg[5] >> 1) << 4) | ((msg[6] & 0xF0) >> 4);
         /* The final altitude is due to the resulting number multiplied
          * by 25, minus 1000. */
@@ -508,7 +505,7 @@ inline Message ADSB1090Handler::DecodeModesMessage(std::array<uint8_t, Message::
     if ((mm.crcok == 0) && config.fixErrors && (mm.msgtype == 11 || mm.msgtype == 17))
     {
         if ((mm.errorbit = FixSingleBitErrors(mm.msg, mm.msgbits)) != -1)    // NOLINT
-        {
+        {                                                                    // NOLINT
             mm.crc   = ModesChecksum(mm.msg, mm.msgbits);
             mm.crcok = 1;
         }
@@ -590,7 +587,7 @@ inline Message ADSB1090Handler::DecodeModesMessage(std::array<uint8_t, Message::
     }
 
     /* Decode 13 bit altitude for DF0, DF4, DF16, DF20 */
-    if (mm.msgtype == 0 || mm.msgtype == 4 || mm.msgtype == 16 || mm.msgtype == 20) { mm.altitude = DecodeAC13Field(mm.msg, &mm.unit); }
+    if (mm.msgtype == 0 || mm.msgtype == 4 || mm.msgtype == 16 || mm.msgtype == 20) { mm.altitude = DecodeAC13Field(mm.msg, mm.unit); }
 
     /* Decode extended squitter specific stuff. */
     if (mm.msgtype == 17)
@@ -604,23 +601,14 @@ inline Message ADSB1090Handler::DecodeModesMessage(std::array<uint8_t, Message::
             // the bit arrangement is
             // 66777777-55556666-44444455-22333333-11112222-00000011
             // Unfortunately its hard to extract this as a bit-field
-            auto ch0 = mm.msg[5] >> 2;
-            auto ch1 = ((mm.msg[5] & 3) << 4) | (mm.msg[6] >> 4);
-            auto ch2 = ((mm.msg[6] & 15) << 2) | (mm.msg[7] >> 6);
-            auto ch3 = mm.msg[7] & 63;
-            auto ch4 = mm.msg[8] >> 2;
-            auto ch5 = ((mm.msg[8] & 3) << 4) | (mm.msg[9] >> 4);
-            auto ch6 = ((mm.msg[9] & 15) << 2) | (mm.msg[10] >> 6);
-            auto ch7 = mm.msg[10] & 63;
-
-            mm.flight[0] = AisCharset[ch0];
-            mm.flight[1] = AisCharset[ch1];    // NOLINT
-            mm.flight[2] = AisCharset[ch2];    // NOLINT
-            mm.flight[3] = AisCharset[ch3];
-            mm.flight[4] = AisCharset[ch4];
-            mm.flight[5] = AisCharset[ch5];    // NOLINT
-            mm.flight[6] = AisCharset[ch6];    // NOLINT
-            mm.flight[7] = AisCharset[ch7];
+            mm.flight[0] = AisCharset[mm.msg[5] >> 2];
+            mm.flight[1] = AisCharset[((mm.msg[5] & 3u) << 4u) | (mm.msg[6] >> 4u)];     // NOLINT
+            mm.flight[2] = AisCharset[((mm.msg[6] & 15u) << 2u) | (mm.msg[7] >> 6u)];    // NOLINT
+            mm.flight[3] = AisCharset[mm.msg[7] & 63];
+            mm.flight[4] = AisCharset[mm.msg[8] >> 2];
+            mm.flight[5] = AisCharset[((mm.msg[8] & 3u) << 4u) | (mm.msg[9] >> 4u)];      // NOLINT
+            mm.flight[6] = AisCharset[((mm.msg[9] & 15u) << 2u) | (mm.msg[10] >> 6u)];    // NOLINT
+            mm.flight[7] = AisCharset[mm.msg[10] & 63];
             // mm.flight[8] = '\0';
         }
         else if (mm.metype >= 9 && mm.metype <= 18)
@@ -628,7 +616,7 @@ inline Message ADSB1090Handler::DecodeModesMessage(std::array<uint8_t, Message::
             /* Airborne position Message */
             mm.fflag        = mm.msg[6] & (1 << 2);
             mm.tflag        = mm.msg[6] & (1 << 3);
-            mm.altitude     = DecodeAC12Field(mm.msg, &mm.unit);
+            mm.altitude     = DecodeAC12Field(mm.msg, mm.unit);
             mm.rawLatitude  = ((mm.msg[6] & 3) << 15) | (mm.msg[7] << 7) | (mm.msg[8] >> 1);
             mm.rawLongitude = ((mm.msg[8] & 1) << 16) | (mm.msg[9] << 8) | mm.msg[10];
         }
@@ -684,7 +672,7 @@ inline Message ADSB1090Handler::DecodeModesMessage(std::array<uint8_t, Message::
  *
  * Note: this function will access m[-1], so the caller should make sure to
  * call it only if we are not at the start of the current buffer. */
-inline int DetectOutOfPhase(uint16_t const* m)
+static inline int DetectOutOfPhase(uint16_t const* m)
 {
     if (m[3] > m[2] / 3) { return 1; }      // NOLINT
     if (m[10] > m[9] / 3) { return 1; }     // NOLINT
@@ -721,7 +709,7 @@ inline int DetectOutOfPhase(uint16_t const* m)
  * it will be more likely to detect a one because of the transformation.
  * In this way similar levels will be interpreted more likely in the
  * correct way. */
-inline void ApplyPhaseCorrection(uint16_t* m)
+static inline void ApplyPhaseCorrection(uint16_t* m)
 {
     m += 16; /* Skip preamble. */
     for (size_t j = 0; j < (Message::LongMessageBits - 1) * 2; j += 2)
@@ -744,6 +732,10 @@ inline void ApplyPhaseCorrection(uint16_t* m)
  * stream of bits and passed to the function to display it. */
 void ADSB1090Handler::DetectModeS(std::span<uint16_t> const& m)
 {
+
+    static constexpr uint8_t ModeSPreambleTimeInUs = 8; /* microseconds */
+    static constexpr size_t  ModeSFullLength       = (ModeSPreambleTimeInUs + Message::LongMessageBits);
+
     auto mlen = m.size();
 
     std::array<uint8_t, Message::LongMessageBits>       bits{};
@@ -776,7 +768,7 @@ void ADSB1090Handler::DetectModeS(std::span<uint16_t> const& m)
      * 8   --
      * 9   -------------------
      */
-    for (j = 0; j < mlen - (MODES_FULL_LEN * 2); j++)
+    for (j = 0; j < mlen - (ModeSFullLength * 2); j++)
     {
         int low         = 0;
         int high        = 0;
@@ -826,7 +818,7 @@ void ADSB1090Handler::DetectModeS(std::span<uint16_t> const& m)
          * magnitude correction. */
         if (useCorrection)
         {
-            std::copy_n(m.begin() + j + MODES_PREAMBLE_US * 2, sizeof(aux), aux.begin());
+            std::copy_n(m.begin() + j + ModeSPreambleTimeInUs * 2, sizeof(aux), aux.begin());
             // memcpy(aux, m +, sizeof(aux));
             if ((j != 0u) && (DetectOutOfPhase(m.data() + j) != 0))
             {
@@ -841,8 +833,8 @@ void ADSB1090Handler::DetectModeS(std::span<uint16_t> const& m)
         errors = 0;
         for (uint32_t i = 0; i < Message::LongMessageBits * 2; i += 2)
         {
-            low   = m[j + i + (MODES_PREAMBLE_US * 2)];
-            high  = m[j + i + (MODES_PREAMBLE_US * 2) + 1];
+            low   = m[j + i + (ModeSPreambleTimeInUs * 2)];
+            high  = m[j + i + (ModeSPreambleTimeInUs * 2) + 1];
             delta = low - high;
             if (delta < 0) { delta = -delta; }
 
@@ -864,7 +856,7 @@ void ADSB1090Handler::DetectModeS(std::span<uint16_t> const& m)
         }
 
         /* Restore the original message if we used magnitude correction. */
-        if (useCorrection) { memcpy(m.data() + j + (MODES_PREAMBLE_US * 2), aux.data(), sizeof(aux)); }
+        if (useCorrection) { memcpy(m.data() + j + (ModeSPreambleTimeInUs * 2), aux.data(), sizeof(aux)); }
 
         /* Pack bits into bytes */
         for (size_t i = 0; i < Message::LongMessageBits; i += 8)
@@ -881,7 +873,7 @@ void ADSB1090Handler::DetectModeS(std::span<uint16_t> const& m)
         delta = 0;
         for (size_t i = 0; i < msglen * 8 * 2; i += 2)
         {
-            delta += abs(m[j + i + (MODES_PREAMBLE_US * 2)] - m[j + i + (MODES_PREAMBLE_US * 2) + 1]);
+            delta += abs(m[j + i + (ModeSPreambleTimeInUs * 2)] - m[j + i + (ModeSPreambleTimeInUs * 2) + 1]);
         }
         delta /= msglen * 4;
 
@@ -904,7 +896,7 @@ void ADSB1090Handler::DetectModeS(std::span<uint16_t> const& m)
             /* Decode the received message and update statistics */
 
             /* Update statistics. */
-            if ((mm.crcok != 0) || (useCorrection != 0))
+            if ((mm.crcok != 0) || (static_cast<int>(useCorrection) != 0))
             {
                 if (errors == 0) { statDemodulated++; }
                 if (mm.errorbit == -1)
@@ -942,7 +934,7 @@ void ADSB1090Handler::DetectModeS(std::span<uint16_t> const& m)
             /* Skip this message if we are sure it's fine. */
             if (mm.crcok != 0)
             {
-                j += (MODES_PREAMBLE_US + (msglen * 8)) * 2;
+                j += (ModeSPreambleTimeInUs + (msglen * 8)) * 2;
                 goodMessage = 1;
                 if (useCorrection) { mm.phaseCorrected = 1; }
             }
@@ -983,7 +975,7 @@ void ADSB1090Handler::UseModesMessage(Message const& mm)
 {
     if (config.checkCRC && mm.crcok == 0) { return; }
     InteractiveReceiveData(mm);
-    // uint32_t addr = (static_cast<uint32_t>(mm->aa1) << 16) | (static_cast<uint32_t>(mm->aa2) << 8) | static_cast<uint32_t>(mm->aa3);
+    // uint32_t addr = (static_cast<uint32_t>(mm.aa1) << 16) | (static_cast<uint32_t>(mm.aa2) << 8) | static_cast<uint32_t>(mm.aa3);
     //_modesSendSBSOutput(mm, _interactiveFindOrCreateAircraft(addr)); /* Feed SBS output clients. */
 }
 
@@ -997,7 +989,7 @@ ADSB::AirCraftImpl& ADSB1090Handler::InteractiveFindOrCreateAircraft(uint32_t ad
 }
 
 /* Always positive MOD operation, used for CPR decoding. */
-inline int CprModFunction(int a, int b)
+static inline int CprModFunction(int a, int b)
 {
     int res = a % b;
     if (res < 0) { res += b; }
@@ -1139,34 +1131,8 @@ inline ADSB::AirCraftImpl& ADSB1090Handler::InteractiveReceiveData(Message const
 {
     auto addr = static_cast<uint32_t>((mm.aa1 << 16) | (mm.aa2 << 8) | mm.aa3);
 
-    auto  now = std::chrono::system_clock::now();
-    auto& a   = InteractiveFindOrCreateAircraft(addr);
-#if 0
-    /* Loookup our AirCraftImpl or create a new one. */
-    auto& subctx = [&](uint32_t addr) {
-        auto& allaircrafts = ctx.Obj().aircrafts();
-        for (size_t i = 0; i < allaircrafts.size(); i++)
-        {
-            if (allaircrafts[i].addr() == addr)
-            {
-                return ctx.TXN().edit_aircrafts(i);
-            }
-        }
-
-        AirCraftImpl newaircraft{};
-        newaircraft.set_addr(uint32_t{addr});
-        snprintf(newaircraft.tailNumber().data(), newaircraft.tailNumber().size(), "%06x", static_cast<int>(addr));
-        ctx.TXN().add_aircrafts(std::move(newaircraft));
-        return ctx.TXN().edit_aircrafts(allaircrafts.size());
-    }(addr);
-
-    auto  current = subctx.Obj().activeIndex();
-    auto  next    = (current + 1) % subctx.Obj().loc().size();
-    auto& locctx  = subctx.edit_loc(next);
-    auto& curloc  = subctx.Obj().loc()[current];
-    locctx.set_seen(now);
-    // a.set_messageCount(int32_t{a.messageCount() + 1});
-#endif
+    auto  now  = std::chrono::system_clock::now();
+    auto& a    = InteractiveFindOrCreateAircraft(addr);
     a.sourceId = sourceId;
     if (mm.msgtype == 0 || mm.msgtype == 4 || mm.msgtype == 20)
     {
@@ -1209,97 +1175,70 @@ inline ADSB::AirCraftImpl& ADSB1090Handler::InteractiveReceiveData(Message const
             }
         }
     }
-#if 0
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wexit-time-destructors"
-    static std::unordered_map<uint32_t, time_point> times;
-#pragma clang diagnostic pop
-    auto it = times.find(a.addr());
 
-    if (it == times.end() || (now - it->second) > 10s)
-    {
-        times[a.addr()] = now;
-        std::cout << "Addr:" << a.addr() << "\tLat:" << a.lat() << "\tLon:" << a.lon() << "\tSpeed:" << a.groundSpeed()
-                  << "\tTrack:" << a.track() << "\tAlt:" << a.altitude() << std::endl;
-    }
-
-    // Notify(lock, ctx, a);
-
-    //_recorder.Record(a, ctx);
-    // for (auto& handler : handlers)
-    //{
-    //   handler->OnTrafficUpdate(lock, a);
-    //}
-#endif
     trafficManager->NotifyChanged(a);
     return a;
 }
 
-#if 0
+#ifdef TODO_ModesSendSBSOutput
 /* Write SBS output to TCP clients. */
-void ADSB1090Handler::_modesSendSBSOutput(Message* mm, AirCraftImpl& a)
+void ADSB1090Handler::ModesSendSBSOutput(Message const& mm, AirCraftImpl const& a)
 {
     char msg[256], *p = msg;
     int  emergency = 0, ground = 0, alert = 0, spi = 0;
 
-    if (mm->msgtype == 4 || mm->msgtype == 5 || mm->msgtype == 21)
+    if (mm.msgtype == 4 || mm.msgtype == 5 || mm.msgtype == 21)
     {
         /* Node: identity is calculated/kept in base10 but is actually
          * octal (07500 is represented as 7500) */
-        if (mm->identity == 7500 || mm->identity == 7600 || mm->identity == 7700) emergency = -1;
-        if (mm->fs == 1 || mm->fs == 3) ground = -1;
-        if (mm->fs == 2 || mm->fs == 3 || mm->fs == 4) alert = -1;
-        if (mm->fs == 4 || mm->fs == 5) spi = -1;
+        if (mm.identity == 7500 || mm.identity == 7600 || mm.identity == 7700) emergency = -1;
+        if (mm.fs == 1 || mm.fs == 3) ground = -1;
+        if (mm.fs == 2 || mm.fs == 3 || mm.fs == 4) alert = -1;
+        if (mm.fs == 4 || mm.fs == 5) spi = -1;
     }
 #pragma warning(push)
 #pragma warning(disable : 4996)
-    if (mm->msgtype == 0)
-    {
-        p += sprintf(p, "MSG,5,,,%02X%02X%02X,,,,,,,%d,,,,,,,,,,", mm->aa1, mm->aa2, mm->aa3, mm->altitude);
-    }
-    else if (mm->msgtype == 4)
+    if (mm.msgtype == 0) { p += sprintf(p, "MSG,5,,,%02X%02X%02X,,,,,,,%d,,,,,,,,,,", mm.aa1, mm.aa2, mm.aa3, mm.altitude); }
+    else if (mm.msgtype == 4)
     {
         p += sprintf(
-            p, "MSG,5,,,%02X%02X%02X,,,,,,,%d,,,,,,,%d,%d,%d,%d", mm->aa1, mm->aa2, mm->aa3, mm->altitude, alert, emergency, spi, ground);
+            p, "MSG,5,,,%02X%02X%02X,,,,,,,%d,,,,,,,%d,%d,%d,%d", mm.aa1, mm.aa2, mm.aa3, mm.altitude, alert, emergency, spi, ground);
     }
-    else if (mm->msgtype == 5)
+    else if (mm.msgtype == 5)
     {
         p += sprintf(
-            p, "MSG,6,,,%02X%02X%02X,,,,,,,,,,,,,%d,%d,%d,%d,%d", mm->aa1, mm->aa2, mm->aa3, mm->identity, alert, emergency, spi, ground);
+            p, "MSG,6,,,%02X%02X%02X,,,,,,,,,,,,,%d,%d,%d,%d,%d", mm.aa1, mm.aa2, mm.aa3, mm.identity, alert, emergency, spi, ground);
     }
-    else if (mm->msgtype == 11)
+    else if (mm.msgtype == 11) { p += sprintf(p, "MSG,8,,,%02X%02X%02X,,,,,,,,,,,,,,,,,", mm.aa1, mm.aa2, mm.aa3); }
+    else if (mm.msgtype == 17 && mm.metype == 4)
     {
-        p += sprintf(p, "MSG,8,,,%02X%02X%02X,,,,,,,,,,,,,,,,,", mm->aa1, mm->aa2, mm->aa3);
+        p += sprintf(p, "MSG,1,,,%02X%02X%02X,,,,,,%s,,,,,,,,0,0,0,0", mm.aa1, mm.aa2, mm.aa3, mm.flight);
     }
-    else if (mm->msgtype == 17 && mm->metype == 4)
-    {
-        p += sprintf(p, "MSG,1,,,%02X%02X%02X,,,,,,%s,,,,,,,,0,0,0,0", mm->aa1, mm->aa2, mm->aa3, mm->flight);
-    }
-    else if (mm->msgtype == 17 && mm->metype >= 9 && mm->metype <= 18)
+    else if (mm.msgtype == 17 && mm.metype >= 9 && mm.metype <= 18)
     {
         //        if (a.lat() == 0 && a.lon() == 0)
-        //            p += sprintf(p, "MSG,3,,,%02X%02X%02X,,,,,,,%d,,,,,,,0,0,0,0", mm->aa1, mm->aa2, mm->aa3, mm->altitude);
+        //            p += sprintf(p, "MSG,3,,,%02X%02X%02X,,,,,,,%d,,,,,,,0,0,0,0", mm.aa1, mm.aa2, mm.aa3, mm.altitude);
         //       else
         p += sprintf(p,
                      "MSG,3,,,%02X%02X%02X,,,,,,,%d,,,%1.5f,%1.5f,,,"
                      "0,0,0,0",
-                     mm->aa1,
-                     mm->aa2,
-                     mm->aa3,
-                     mm->altitude,
+                     mm.aa1,
+                     mm.aa2,
+                     mm.aa3,
+                     mm.altitude,
                      a.lat,
                      a.lon);
     }
-    else if (mm->msgtype == 17 && mm->metype == 19 && mm->mesub == 1)
+    else if (mm.msgtype == 17 && mm.metype == 19 && mm.mesub == 1)
     {
-        int vr = (mm->vert_rate_sign == 0 ? 1 : -1) * (mm->vert_rate - 1) * 64;
+        int vr = (mm.vert_rate_sign == 0 ? 1 : -1) * (mm.vert_rate - 1) * 64;
 
-        p += sprintf(p, "MSG,4,,,%02X%02X%02X,,,,,,,,%d,%d,,,%i,,0,0,0,0", mm->aa1, mm->aa2, mm->aa3, a.Speed(), a.Heading(), vr);
+        p += sprintf(p, "MSG,4,,,%02X%02X%02X,,,,,,,,%d,%d,,,%i,,0,0,0,0", mm.aa1, mm.aa2, mm.aa3, a.Speed(), a.Heading(), vr);
     }
-    else if (mm->msgtype == 21)
+    else if (mm.msgtype == 21)
     {
         p += sprintf(
-            p, "MSG,6,,,%02X%02X%02X,,,,,,,,,,,,,%d,%d,%d,%d,%d", mm->aa1, mm->aa2, mm->aa3, mm->identity, alert, emergency, spi, ground);
+            p, "MSG,6,,,%02X%02X%02X,,,,,,,,,,,,,%d,%d,%d,%d,%d", mm.aa1, mm.aa2, mm.aa3, mm.identity, alert, emergency, spi, ground);
     }
 #pragma warning(pop)
     else
@@ -1315,6 +1254,8 @@ void ADSB1090Handler::_modesSendSBSOutput(Message* mm, AirCraftImpl& a)
 // NOLINTEND(cppcoreguidelines-pro-bounds-constant-array-index)
 // NOLINTEND(readability-function-cognitive-complexity)
 // NOLINTEND(readability-magic-numbers)
+
+// NOLINTEND
 std::unique_ptr<ADSB::IDataProvider> ADSB::TryCreateADSB1090Handler(std::shared_ptr<ADSB::TrafficManager> const& trafficManager,
                                                                     RTLSDR::IDeviceSelector const*               selectorIn,
                                                                     uint8_t                                      sourceId)

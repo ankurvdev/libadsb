@@ -1,34 +1,35 @@
 #include "ADSB1090.h"
 #include "RTLSDR.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <utility>
+// NOLINTBEGIN
 
 extern "C" void init_fec();
 extern "C" int  process_buffer(uint16_t const*, int len, uint64_t c);
-extern "C" void make_atan2_table();
-extern "C" void convert_to_phi(uint16_t* buffer, int n);
 
 ADSB::TrafficManager** ADSB::GetThreadLocalTrafficManager()
 {
     SUPPRESS_WARNINGS_START
     SUPPRESS_CLANG_WARNING("-Wunique-object-duplication")
-    static thread_local TrafficManager* trafficManager;
+    static thread_local TrafficManager* TrafficManager;
     SUPPRESS_WARNINGS_END
-    return &trafficManager;
+    return &TrafficManager;
 }
 
 struct UAT978Handler : RTLSDR::IDataHandler, ADSB::IDataProvider
 {
     friend void DumpRawMessage(char /*updown*/, uint8_t* data, int /*len*/, int /*rs_errors*/);
 
-    UAT978Handler(std::shared_ptr<ADSB::TrafficManager> trafficManager, RTLSDR::IDeviceSelector const* selector, uint8_t sourceId) :
-        _trafficManager(trafficManager),
-        _listener978{selector, RTLSDR::Config{.gain = 48, .frequency = 978000000, .sampleRate = 2083334}},
-        _sourceId(sourceId)
+    UAT978Handler(std::shared_ptr<ADSB::TrafficManager> trafficManagerIn, RTLSDR::IDeviceSelector const* selectorIn, uint8_t sourceIdIn) :
+        trafficManager(std::move(std::move(trafficManagerIn))),
+        listener978{selectorIn, RTLSDR::Config{.gain = 48, .frequency = 978000000, .sampleRate = 2083334}},
+        sourceId(sourceIdIn)
     {
-        std::fill(std::begin(_buffer), std::end(_buffer), uint16_t{0u});
-        std::fill(std::begin(_iqphase), std::end(_iqphase), uint16_t{0u});
+        std::ranges::fill(buffer, uint16_t{0u});
+        std::ranges::fill(iqphase, uint16_t{0u});
     }
 
     ~UAT978Handler() override = default;
@@ -36,68 +37,70 @@ struct UAT978Handler : RTLSDR::IDataHandler, ADSB::IDataProvider
     CLASS_DELETE_COPY_AND_MOVE(UAT978Handler);
 
     // Inherited via IDataHandler
-    virtual void HandleData(std::span<uint8_t const> const& dataBytes) override
+    void HandleData(std::span<uint8_t const> const& dataBytes) override
     {
-        std::span<uint16_t const> data(reinterpret_cast<uint16_t const*>(dataBytes.data()), dataBytes.size() / 2);
-        *ADSB::GetThreadLocalTrafficManager() = this->_trafficManager.get();
+        std::span<uint16_t const> data(reinterpret_cast<uint16_t const*>(dataBytes.data()), dataBytes.size() / 2);    // NOLINT
+        *ADSB::GetThreadLocalTrafficManager() = this->trafficManager.get();
 
         size_t j = 0;
-        size_t i = _used;
+        size_t i = used;
         while (j < data.size())
         {
-            for (i = _used; i < std::size(_buffer) && j < data.size(); i++, j++) { _buffer[i] = _iqphase[data[j]]; }
+            for (i = used; i < std::size(buffer) && j < data.size(); i++, j++) { buffer[i] = iqphase[data[j]]; }
 
-            int bufferProcessed = process_buffer(_buffer, static_cast<int>(i), _offset);
-            _offset             = static_cast<uint64_t>(static_cast<int64_t>(_offset) + bufferProcessed);
+            int bufferProcessed = process_buffer(buffer.data(), static_cast<int>(i), offset);
+            offset              = static_cast<uint64_t>(static_cast<int64_t>(offset) + bufferProcessed);
             // Move the rest of the buffer to the start
-            std::memmove(_buffer, _buffer + bufferProcessed, static_cast<size_t>(static_cast<int>(i) - bufferProcessed));
-            _used = static_cast<size_t>(static_cast<int>(i) - bufferProcessed);
+            std::memmove(buffer.data(), buffer.data() + bufferProcessed, static_cast<size_t>(static_cast<int>(i) - bufferProcessed));
+            used = static_cast<size_t>(static_cast<int>(i) - bufferProcessed);
         }
     }
 
     void Start(ADSB::IListener& /*listener*/) override
     {
-        _InitATan2Table();
+        InitATan2Table();
         init_fec();
-        _listener978.Start(this);
+        listener978.Start(this);
     }
 
-    void Stop() override { _listener978.Stop(); }
-    void NotifySelfLocation(ADSB::IAirCraft const&) override {}
+    void Stop() override { listener978.Stop(); }
+    void NotifySelfLocation(ADSB::IAirCraft const& /*unused*/) override {}
 
-    void _InitATan2Table()
+    void InitATan2Table()
     {
-        unsigned i, q;
+        unsigned i;
+        unsigned q;
         union
         {
             uint8_t  iq[2];
             uint16_t iq16;
-        } u;
+        } u{};
 
         for (i = 0; i < 256; ++i)
         {
-            double d_i = (i - 127.5);
+            double dI = (i - 127.5);
             for (q = 0; q < 256; ++q)
             {
-                double d_q        = (q - 127.5);
-                double ang        = atan2(d_q, d_i) + M_PI;    // atan2 returns [-pi..pi], normalize to [0..2*pi]
-                double scaled_ang = round(32768 * ang / M_PI);
+                double dQ        = (q - 127.5);
+                double ang       = atan2(dQ, dI) + M_PI;    // atan2 returns [-pi..pi], normalize to [0..2*pi]
+                double scaledAng = round(32768 * ang / M_PI);
 
-                u.iq[0]          = static_cast<uint8_t>(i);
-                u.iq[1]          = static_cast<uint8_t>(q);
-                _iqphase[u.iq16] = static_cast<uint16_t>(scaled_ang < 0 ? 0 : scaled_ang > 65535 ? 65535 : scaled_ang);
+                u.iq[0]         = static_cast<uint8_t>(i);
+                u.iq[1]         = static_cast<uint8_t>(q);
+                iqphase[u.iq16] = static_cast<uint16_t>(scaledAng < 0 ? 0 : scaledAng > 65535 ? 65535 : scaledAng);
             }
         }
     }
 
-    std::shared_ptr<ADSB::TrafficManager> _trafficManager;
-    RTLSDR                                _listener978;
-    size_t                                _used   = 0;
-    uint64_t                              _offset = 0;
-    uint16_t                              _buffer[256 * 256];
-    uint16_t                              _iqphase[256 * 256];
-    uint8_t                               _sourceId{2};
+    std::shared_ptr<ADSB::TrafficManager> trafficManager;
+    RTLSDR                                listener978;
+    size_t                                used   = 0;
+    uint64_t                              offset = 0;
+    std::array<uint16_t, 256 * 256>       buffer{};
+    std::array<uint16_t, 256 * 256>       iqphase{};
+    uint8_t                               sourceId{2};
 };
+// NOLINTEND
 
 std::unique_ptr<ADSB::IDataProvider> ADSB::TryCreateUAT978Handler(std::shared_ptr<ADSB::TrafficManager> const& trafficManager,
                                                                   RTLSDR::IDeviceSelector const*               selector,
