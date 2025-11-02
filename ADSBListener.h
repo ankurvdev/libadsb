@@ -18,6 +18,8 @@ struct Config
 
 struct IAirCraft
 {
+    static constexpr double LatLonPrecision = 10000000.;
+
     using time_point = std::chrono::time_point<std::chrono::system_clock>;
 
     IAirCraft()          = default;

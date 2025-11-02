@@ -30,6 +30,8 @@ struct UAT978Handler : RTLSDR::IDataHandler, ADSB::IDataProvider
     {
         std::ranges::fill(buffer, uint16_t{0u});
         std::ranges::fill(iqphase, uint16_t{0u});
+        InitATan2Table();
+        init_fec();
     }
 
     ~UAT978Handler() override = default;
@@ -56,12 +58,7 @@ struct UAT978Handler : RTLSDR::IDataHandler, ADSB::IDataProvider
         }
     }
 
-    void Start(ADSB::IListener& /*listener*/) override
-    {
-        InitATan2Table();
-        init_fec();
-        listener978.Start(this);
-    }
+    void Start(ADSB::IListener& /*listener*/) override { listener978.Start(this); }
 
     void Stop() override { listener978.Stop(); }
     void NotifySelfLocation(ADSB::IAirCraft const& /*unused*/) override {}
