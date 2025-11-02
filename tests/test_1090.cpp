@@ -94,7 +94,7 @@ template <typename TLambda> static void BufferedFileRead(std::filesystem::path c
     ifs.close();
 }
 
-void RunTestWithFile(std::filesystem::path const& fpath)
+static void RunTestWithFile(std::filesystem::path const& fpath)
 {
     using CreatorFn    = decltype(ADSB::test::TryCreateUAT978Handler);
     CreatorFn* creator = nullptr;
