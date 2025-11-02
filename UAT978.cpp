@@ -1,31 +1,28 @@
-#pragma once
-
-#include "AircraftImpl.h"
+#include "ADSB1090.h"
 #include "RTLSDR.h"
 
 #include <cmath>
 #include <cstring>
 
-extern "C" void        init_fec();
-extern "C" int         process_buffer(uint16_t const*, int len, uint64_t c);
-extern "C" void        make_atan2_table();
-extern "C" void        convert_to_phi(uint16_t* buffer, int n);
-struct UAT978Handler** GetThreadLocalUAT978Handler();
+extern "C" void init_fec();
+extern "C" int  process_buffer(uint16_t const*, int len, uint64_t c);
+extern "C" void make_atan2_table();
+extern "C" void convert_to_phi(uint16_t* buffer, int n);
 
-inline struct UAT978Handler** GetThreadLocalUAT978Handler()
+ADSB::TrafficManager** ADSB::GetThreadLocalTrafficManager()
 {
     SUPPRESS_WARNINGS_START
     SUPPRESS_CLANG_WARNING("-Wunique-object-duplication")
-    static thread_local struct UAT978Handler* handler;
+    static thread_local TrafficManager* trafficManager;
     SUPPRESS_WARNINGS_END
-    return &handler;
+    return &trafficManager;
 }
 
-struct UAT978Handler : RTLSDR::IDataHandler
+struct UAT978Handler : RTLSDR::IDataHandler, ADSB::IDataProvider
 {
     friend void DumpRawMessage(char /*updown*/, uint8_t* data, int /*len*/, int /*rs_errors*/);
 
-    UAT978Handler(std::shared_ptr<TrafficManager> trafficManager, RTLSDR::IDeviceSelector const* selector, uint8_t sourceId) :
+    UAT978Handler(std::shared_ptr<ADSB::TrafficManager> trafficManager, RTLSDR::IDeviceSelector const* selector, uint8_t sourceId) :
         _trafficManager(trafficManager),
         _listener978{selector, RTLSDR::Config{.gain = 48, .frequency = 978000000, .sampleRate = 2083334}},
         _sourceId(sourceId)
@@ -42,7 +39,7 @@ struct UAT978Handler : RTLSDR::IDataHandler
     virtual void HandleData(std::span<uint8_t const> const& dataBytes) override
     {
         std::span<uint16_t const> data(reinterpret_cast<uint16_t const*>(dataBytes.data()), dataBytes.size() / 2);
-        *GetThreadLocalUAT978Handler() = this;
+        *ADSB::GetThreadLocalTrafficManager() = this->_trafficManager.get();
 
         size_t j = 0;
         size_t i = _used;
@@ -58,14 +55,15 @@ struct UAT978Handler : RTLSDR::IDataHandler
         }
     }
 
-    void Start(ADSB::IListener& /*listener*/)
+    void Start(ADSB::IListener& /*listener*/) override
     {
         _InitATan2Table();
         init_fec();
         _listener978.Start(this);
     }
 
-    void Stop() { _listener978.Stop(); }
+    void Stop() override { _listener978.Stop(); }
+    void NotifySelfLocation(ADSB::IAirCraft const&) override {}
 
     void _InitATan2Table()
     {
@@ -92,17 +90,25 @@ struct UAT978Handler : RTLSDR::IDataHandler
         }
     }
 
-    std::shared_ptr<TrafficManager> _trafficManager;
-    RTLSDR                          _listener978;
-    size_t                          _used   = 0;
-    uint64_t                        _offset = 0;
-    uint16_t                        _buffer[256 * 256];
-    uint16_t                        _iqphase[256 * 256];
-    uint8_t                         _sourceId{2};
-
-    static std::unique_ptr<UAT978Handler>
-    TryCreate(std::shared_ptr<TrafficManager> trafficManager, RTLSDR::IDeviceSelector const* selector, uint8_t sourceId)
-    {
-        return std::make_unique<UAT978Handler>(trafficManager, selector, sourceId);
-    }
+    std::shared_ptr<ADSB::TrafficManager> _trafficManager;
+    RTLSDR                                _listener978;
+    size_t                                _used   = 0;
+    uint64_t                              _offset = 0;
+    uint16_t                              _buffer[256 * 256];
+    uint16_t                              _iqphase[256 * 256];
+    uint8_t                               _sourceId{2};
 };
+
+std::unique_ptr<ADSB::IDataProvider> ADSB::TryCreateUAT978Handler(std::shared_ptr<ADSB::TrafficManager> const& trafficManager,
+                                                                  RTLSDR::IDeviceSelector const*               selector,
+                                                                  uint8_t                                      sourceId)
+{
+    return std::make_unique<UAT978Handler>(trafficManager, selector, sourceId);
+}
+
+std::unique_ptr<RTLSDR::IDataHandler> ADSB::test::TryCreateUAT978Handler(std::shared_ptr<ADSB::TrafficManager> const& trafficManager,
+                                                                         RTLSDR::IDeviceSelector const*               selector,
+                                                                         uint8_t                                      sourceId)
+{
+    return std::make_unique<UAT978Handler>(trafficManager, selector, sourceId);
+}

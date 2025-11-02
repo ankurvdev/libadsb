@@ -1,6 +1,5 @@
 cmake_minimum_required(VERSION 3.19)
-include(${CMAKE_CURRENT_LIST_DIR}/BuildEnv.cmake)
-
+include(${CMAKE_CURRENT_LIST_DIR}/cmake/BuildEnv.cmake)
 project(libadsb)
 
 include(CTest)
@@ -9,6 +8,7 @@ set(CMAKE_CXX_STANDARD 26)
 
 EnableStrictCompilation()
 InitClangDIntellisense()
+include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/fmt.cmake)
 
 option(libadsb_BUILD_TESTING "Build Tests" ON)
 option(libadsb_PREFER_SYSTEM_LIB "Find packages and use system libs for dependencies" ON)
@@ -115,7 +115,8 @@ add_library(adsb STATIC
     AircraftImpl.h
     CommonMacros.h
     SetThreadName.h
-    UAT978.h
+    UAT978.cpp
+    ADSB1090.cpp
     ADSBListener.cpp
     )
 
@@ -132,4 +133,17 @@ if (libadsb_BUILD_TESTING AND BUILD_TESTING)
         generate_export_header(testadsb_app)
         target_include_directories(testadsb_app PRIVATE ${PROJECT_BINARY_DIR})
     endif()
+
+    include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/EmbedResource.cmake)
+    include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/Catch2.cmake)
+    include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/dtl.cmake)
+
+    add_executable(unittest_1090 tests/test_1090.cpp)
+    file(DOWNLOAD https://github.com/antirez/dump1090/raw/refs/heads/master/testfiles/modes1.bin ${CMAKE_CURRENT_BINARY_DIR}/modes1.bin)
+    find_package(EmbedResource REQUIRED)
+    target_add_resource(unittest_1090 RESOURCE_COLLECTION_NAME traces RESOURCES "${CMAKE_CURRENT_BINARY_DIR}/modes1.bin")
+    target_include_directories(unittest_1090 PRIVATE .)
+    target_link_libraries(unittest_1090 PRIVATE Catch2::Catch2WithMain dtl::dtl fmt::fmt adsb)
+    target_compile_definitions(unittest_1090 PRIVATE HAVE_EMBEDRESOURCE=1)
+    add_test(NAME unittest_1090 COMMAND unittest_1090)
 endif()

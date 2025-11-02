@@ -6,7 +6,7 @@ extern "C"
 #include "dump978/legacy/uat_decode.h"
     void dump_raw_message(char updown, uint8_t* data, int len, int rsErrors);    // NOLINT
 }
-#include "UAT978.h"
+#include "ADSB1090.h"
 #include <algorithm>
 #include <iostream>
 
@@ -15,9 +15,9 @@ void dump_raw_message(char /*updown*/, uint8_t* data, int /*len*/, int /*rs_erro
     struct uat_adsb_mdb mdb{};
 
     uat_decode_adsb_mdb(data, &mdb);
-    auto* handler  = *GetThreadLocalUAT978Handler();
-    auto& aircraft = handler->_trafficManager->FindOrCreate(mdb.address);
-    auto  sourceId = handler->_sourceId;
+    auto* manager  = *ADSB::GetThreadLocalTrafficManager();
+    auto& aircraft = manager->FindOrCreate(mdb.address);
+    // auto  sourceId = handler->sourceId;
     if (mdb.has_ms)
     {
         /*
@@ -88,7 +88,7 @@ void dump_raw_message(char /*updown*/, uint8_t* data, int /*len*/, int /*rs_erro
         switch (mdb.vert_rate_source)
         {
         case ALT_BARO: [[fallthrough]];
-        case ALT_GEO: aircraft.vert_rate = mdb.vert_rate; break;
+        case ALT_GEO: aircraft.vertRate = mdb.vert_rate; break;
         case ALT_INVALID:
         default: break;
         }
@@ -117,6 +117,6 @@ void dump_raw_message(char /*updown*/, uint8_t* data, int /*len*/, int /*rs_erro
 #endif
     }
     aircraft.sourceId = 2u;
-    handler->_trafficManager->NotifyChanged(aircraft);
+    manager->NotifyChanged(aircraft);
 }
 // NOLINTEND(readability-magic-numbers)
