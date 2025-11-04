@@ -166,6 +166,7 @@ IndentCaseLabels: false
 #
 #    = a + b;
 # RemoveEmptyLinesInUnwrappedLines: true # clang-format-20
+
 # true:                                  false:
 # int a = 5;                     vs.     int a=5;
 # a += 42                                a+=42;

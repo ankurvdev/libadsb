@@ -1,8 +1,9 @@
+// cppforge-sync
 #pragma once
 #ifdef _MSC_VER
 #include <windows.h>
 
-inline void SetThreadName(const char* threadName)
+inline void SetThreadName(char const* threadName)
 {
 #pragma pack(push, 8)
 
@@ -32,15 +33,19 @@ inline void SetThreadName(const char* threadName)
 
 #elif defined(__linux__)
 #include <sys/prctl.h>
-inline void SetThreadName(const char* threadName)
+inline void SetThreadName(char const* threadName)
 {
     prctl(PR_SET_NAME, threadName, 0, 0, 0);
 }
 
 #else
 #include <pthread.h>
-inline void SetThreadName(const char* threadName)
+inline void SetThreadName(char const* threadName)
 {
+#ifdef __APPLE__
+    pthread_setname_np(threadName);
+#else
     pthread_setname_np(pthread_self(), threadName);
+#endif
 }
 #endif
