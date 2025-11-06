@@ -54,7 +54,7 @@ struct TrafficManager : std::enable_shared_from_this<TrafficManager>
         auto it = aircrafts.find(addr);
         if (it != aircrafts.end()) { return *it->second.get(); }
 
-        auto aptr       = new AirCraftImpl();
+        auto* aptr      = new AirCraftImpl();
         aircrafts[addr] = std::unique_ptr<AirCraftImpl>(aptr);
         auto& a         = *aptr;
         a.addr          = addr;
