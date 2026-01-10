@@ -818,7 +818,7 @@ void ADSB1090Handler::DetectModeS(std::span<uint16_t> const& m)
          * magnitude correction. */
         if (useCorrection)
         {
-            std::copy_n(m.begin() + j + ModeSPreambleTimeInUs * 2, sizeof(aux), aux.begin());
+            std::copy_n(m.begin() + static_cast<int>(j) + ModeSPreambleTimeInUs * 2, sizeof(aux), aux.begin());
             // memcpy(aux, m +, sizeof(aux));
             if ((j != 0u) && (DetectOutOfPhase(m.data() + j) != 0))
             {
