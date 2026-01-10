@@ -1,6 +1,6 @@
 #include "ADSB1090.h"
 #include "AircraftImpl.h"
-#include "RTLSDR.h"
+#include "RTLSDR.hpp"
 
 #include "TestUtils.h"
 #include <fmt/base.h>

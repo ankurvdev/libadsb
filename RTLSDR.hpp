@@ -6,22 +6,20 @@ SUPPRESS_STL_WARNINGS
 #include "SetThreadName.h"
 #include <rtl-sdr.h>
 
-#include <fstream>
-#include <future>
-SUPPRESS_WARNINGS_END
-
-#include <array>
 #include <cassert>
 #include <condition_variable>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <fstream>
+#include <future>
 #include <iostream>
 #include <mutex>
 #include <span>
 #include <thread>
 #include <unordered_set>
 #include <vector>
+SUPPRESS_WARNINGS_END
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -126,14 +124,18 @@ struct RTLSDR
                     if (_clients.count(client) == 0) return;
                     _RequestDevice(guard);
                 }
-                do {
+                do
+                {
                     {
                         std::unique_lock<std::mutex> guard(_mgr_mutex);
                         if (_clients.count(client) == 0) return;
                         dev = client->_mgrctx.dev;
                     }
                     if (dev == nullptr) { std::this_thread::sleep_for(std::chrono::milliseconds{500}); }
-                    else { client->_mgrctx.running = true; }
+                    else
+                    {
+                        client->_mgrctx.running = true;
+                    }
                 } while (dev == nullptr);
 
                 rtlsdr_read_async(dev,
@@ -188,7 +190,8 @@ struct RTLSDR
         void _RequestDeviceImpl()
         {
             SetThreadName("RTLSDR::ReqDev");
-            do {
+            do
+            {
                 try
                 {
                     // Let things stabilize a little
@@ -262,10 +265,7 @@ struct RTLSDR
                         }
                     }
                     break;
-                } catch (std::exception const&)
-                {
-                    _deviceSearching = true;
-                }
+                } catch (std::exception const&) { _deviceSearching = true; }
             } while (true);
         }
 
@@ -449,10 +449,7 @@ struct RTLSDR
         try
         {
             reinterpret_cast<RTLSDR*>(ctx)->_OnDataAvailable({buf, len});
-        } catch (std::exception const& ex)
-        {
-            std::cerr << ex.what() << std::endl;
-        }
+        } catch (std::exception const& ex) { std::cerr << ex.what() << std::endl; }
     }
 
     std::shared_ptr<_Manager> _device_manager = _Manager::GetInstance();
