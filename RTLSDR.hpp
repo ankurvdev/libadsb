@@ -31,15 +31,17 @@ struct RTLSDR
 
     struct IDataHandler
     {
+        IDataHandler()                                                = default;
         virtual ~IDataHandler()                                       = default;
         virtual void HandleData(std::span<uint8_t const> const& data) = 0;
+        CLASS_DEFAULT_COPY_AND_MOVE(IDataHandler);
     };
 
     static constexpr int      AutoGain        = -100;
     static constexpr int      MaxGain         = 999999;
     static constexpr int      CorrectionPPM   = 0;
     static constexpr uint32_t SampleRate      = 0;    // Invalid
-    static constexpr size_t   BufferLength    = 32 * 512;
+    static constexpr size_t   BufferLength    = 32u * 512u;
     static constexpr size_t   BufferCount     = 16;
     static constexpr uint32_t CenterFrequency = 0;
 
@@ -56,23 +58,25 @@ struct RTLSDR
     struct DeviceInfo
     {
         uint32_t index;
-        char     vendor[256];
-        char     product[256];
-        char     serial[256];
+        char     vendor[256];     // NOLINT
+        char     product[256];    // NOLINT
+        char     serial[256];     // NOLINT
     };
 
     struct IDeviceSelector
     {
+        IDeviceSelector()                                                  = default;
         virtual ~IDeviceSelector()                                         = default;
         [[nodiscard]] virtual bool SelectDevice(DeviceInfo const& d) const = 0;
+        CLASS_DEFAULT_COPY_AND_MOVE(IDeviceSelector);
     };
 
     private:
-    struct _ManagerContext
+    struct ManagerContext
     {
-        _ManagerContext()  = default;
-        ~_ManagerContext() = default;
-        CLASS_DELETE_COPY_AND_MOVE(_ManagerContext);
+        ManagerContext()  = default;
+        ~ManagerContext() = default;
+        CLASS_DELETE_COPY_AND_MOVE(ManagerContext);
 
         std::atomic<bool> running{false};
         rtlsdr_dev_t*     dev{nullptr};
@@ -81,29 +85,29 @@ struct RTLSDR
     // RTLSDR is hugely single threaded
     // Cannot open devices once a device is opened
     // A manager is required for orchestration
-    struct _Manager
+    struct Manager
     {
         SUPPRESS_WARNINGS_START
         SUPPRESS_CLANG_WARNING("-Wexit-time-destructors")
         SUPPRESS_CLANG_WARNING("-Wglobal-constructors")
         SUPPRESS_CLANG_WARNING("-Wunique-object-duplication")
-        static inline std::mutex              MgrMutex;
-        static inline std::weak_ptr<_Manager> Instance;
+        static inline std::mutex             MgrMutex;
+        static inline std::weak_ptr<Manager> Instance;
         SUPPRESS_WARNINGS_END
-        static std::shared_ptr<_Manager> GetInstance()
+        static std::shared_ptr<Manager> GetInstance()
         {
             std::scoped_lock lockGuard(MgrMutex);
             if (Instance.expired())
             {
-                auto ptr = std::make_shared<_Manager>();
+                auto ptr = std::make_shared<Manager>();
                 Instance = ptr;
                 return ptr;
             }
             return Instance.lock();
         }
 
-        _Manager() = default;
-        CLASS_DELETE_COPY_AND_MOVE(_Manager);
+        Manager() = default;
+        CLASS_DELETE_COPY_AND_MOVE(Manager);
 
         // Blocking call
         void Start(RTLSDR* client)
@@ -122,7 +126,7 @@ struct RTLSDR
                 {
                     std::unique_lock<std::mutex> guard(MgrMutex);
                     if (!clients.contains(client)) { return; }
-                    _RequestDevice(guard);
+                    RequestDevice(guard);
                 }
                 do
                 {
@@ -153,7 +157,7 @@ struct RTLSDR
             }
         }
 
-        static void _Stop(std::unique_lock<std::mutex>& /*guard*/, RTLSDR* client)
+        static void Stop(std::unique_lock<std::mutex>& /*guard*/, RTLSDR* client)
         {
             auto* dev = client->_mgrctx.dev;
             if (dev != nullptr)
@@ -168,16 +172,16 @@ struct RTLSDR
         void Stop(RTLSDR* client)
         {
             std::unique_lock<std::mutex> guard(MgrMutex);
-            _Stop(guard, client);
+            Stop(guard, client);
             clients.erase(client);
         }
 
-        void _RequestDevice(std::unique_lock<std::mutex> const& /*guard*/)
+        void RequestDevice(std::unique_lock<std::mutex> const& /*guard*/)
         {
             if (clients.empty()) { return; }
             if (deviceSearching) { return; }
             deviceSearching    = true;
-            deviceSearchThread = std::async([this]() { this->_RequestDeviceImpl(); });
+            deviceSearchThread = std::async([this]() { this->RequestDeviceImpl(); });
         }
 
         // Scenarios
@@ -187,7 +191,7 @@ struct RTLSDR
         // 4. SpinDown
         // 5. OnDeviceAvailable
 
-        void _RequestDeviceImpl()
+        void RequestDeviceImpl()
         {
             SetThreadName("RTLSDR::ReqDev");
             do
@@ -200,7 +204,7 @@ struct RTLSDR
                         std::unique_lock<std::mutex> guard(MgrMutex);
                         deviceSearching = false;
                         if (clients.empty()) { return; }
-                        for (auto* client : clients) { _Stop(guard, client); }
+                        for (auto* client : clients) { Stop(guard, client); }
                     }
                     auto deviceCountLambda = [&]() {
                         std::unique_lock<std::mutex> guard(MgrMutex);
@@ -459,8 +463,8 @@ struct RTLSDR
         } catch (std::exception const& ex) { std::cerr << ex.what() << '\n'; }
     }
 
-    std::shared_ptr<_Manager> _device_manager = _Manager::GetInstance();
-    _ManagerContext           _mgrctx;
+    std::shared_ptr<Manager> _device_manager = Manager::GetInstance();
+    ManagerContext           _mgrctx;
 
     IDeviceSelector const* const _selector{};
     uint32_t                     _deviceIndex{InvalidDeviceIndex};
