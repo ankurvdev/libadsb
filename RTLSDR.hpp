@@ -111,7 +111,7 @@ struct RTLSDR
             SetThreadName("RTLSDR::ReadAsync");
             {
                 std::unique_lock<std::mutex> guard(MgrMutex);
-                _clients.insert(client);
+                clients.insert(client);
             }
 
             while (true)
@@ -121,14 +121,14 @@ struct RTLSDR
                 rtlsdr_dev_t* dev = nullptr;
                 {
                     std::unique_lock<std::mutex> guard(MgrMutex);
-                    if (!_clients.contains(client)) { return; }
+                    if (!clients.contains(client)) { return; }
                     _RequestDevice(guard);
                 }
                 do
                 {
                     {
                         std::unique_lock<std::mutex> guard(MgrMutex);
-                        if (!_clients.contains(client)) { return; }
+                        if (!clients.contains(client)) { return; }
                         dev = client->_mgrctx.dev;
                     }
                     if (dev == nullptr) { std::this_thread::sleep_for(std::chrono::milliseconds{500}); }
@@ -169,12 +169,12 @@ struct RTLSDR
         {
             std::unique_lock<std::mutex> guard(MgrMutex);
             _Stop(guard, client);
-            _clients.erase(client);
+            clients.erase(client);
         }
 
         void _RequestDevice(std::unique_lock<std::mutex> const& /*guard*/)
         {
-            if (_clients.empty()) { return; }
+            if (clients.empty()) { return; }
             if (deviceSearching) { return; }
             deviceSearching    = true;
             deviceSearchThread = std::async([this]() { this->_RequestDeviceImpl(); });
@@ -199,8 +199,8 @@ struct RTLSDR
                     {
                         std::unique_lock<std::mutex> guard(MgrMutex);
                         deviceSearching = false;
-                        if (_clients.empty()) { return; }
-                        for (auto* client : _clients) { _Stop(guard, client); }
+                        if (clients.empty()) { return; }
+                        for (auto* client : clients) { _Stop(guard, client); }
                     }
                     auto deviceCountLambda = [&]() {
                         std::unique_lock<std::mutex> guard(MgrMutex);
@@ -233,7 +233,7 @@ struct RTLSDR
                                 // logging
                                 continue;
                             }
-                            for (auto const& client : _clients)
+                            for (auto const& client : clients)
                             {
                                 if (client->_mgrctx.dev != nullptr)
                                 {
@@ -251,7 +251,7 @@ struct RTLSDR
                             if (dev != nullptr)
                             {
                                 // Couldnt match a selector. Just assign to the first client that needs a device
-                                for (auto const& client : _clients)
+                                for (auto const& client : clients)
                                 {
                                     if (client->_mgrctx.dev != nullptr)
                                     {
@@ -302,7 +302,7 @@ struct RTLSDR
         }
         bool                        deviceSearching{false};
         std::future<void>           deviceSearchThread;
-        std::unordered_set<RTLSDR*> _clients;
+        std::unordered_set<RTLSDR*> clients;
     };
 
     public:
