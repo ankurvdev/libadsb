@@ -74,7 +74,7 @@ struct Message
     int rawLatitude;  /* Non decoded latitude */
     int rawLongitude; /* Non decoded longitude */
 
-    std::array<char, 9> flight; /* 8 chars flight number. */
+    std::array<char, 8> flight; /* 8 chars flight number. */
 
     int ewDir;          /* 0 = East, 1 = West. */
     int ewVelocity;     /* E/W velocity. */
@@ -155,7 +155,7 @@ struct ADSB1090Handler : RTLSDR::IDataHandler, ADSB::IDataProvider
 
     CLASS_DELETE_COPY_AND_MOVE(ADSB1090Handler);
 
-    virtual void HandleData(std::span<uint8_t const> const& data) override
+    void HandleData(std::span<uint8_t const> const& data) override
     {
         uint16_t* m = magnitudeVector.data();
         auto*     p = data.data();
@@ -206,8 +206,8 @@ struct ADSB1090Handler : RTLSDR::IDataHandler, ADSB::IDataProvider
                && (std::chrono::system_clock::now() - it->second) <= std::chrono::seconds{ModesIcaoCacheTtlInSecs};
     }
 
-    int                 BruteForceAP(uint8_t* msg, Message* mm);
-    Message             DecodeModesMessage(uint8_t* msgIn);
+    bool                BruteForceAp(std::array<uint8_t, Message::LongMessageBytes> const& msg, Message& mm);
+    Message             DecodeModesMessage(std::array<uint8_t, Message::LongMessageBytes> const& msgIn);
     void                DetectModeS(uint16_t* m, uint32_t mlen);
     ADSB::AirCraftImpl& InteractiveReceiveData(Message const& mm);
     ADSB::AirCraftImpl& InteractiveFindOrCreateAircraft(uint32_t addr);
@@ -274,7 +274,7 @@ static constexpr auto ModesChecksumTable = std::array<uint32_t, 112>{
     0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000,
     0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000};
 
-static uint32_t modesChecksum(uint8_t* msg, size_t bits)
+static uint32_t ModesChecksum(uint8_t* msg, size_t bits)
 {
     uint32_t crc    = 0;
     size_t   offset = (bits == 112) ? 0u : (112u - 56u);
@@ -301,9 +301,9 @@ static size_t ModesMessageLenByType(int type)
 /* Try to fix single bit errors using the checksum. On success modifies
  * the original buffer with the fixed version, and returns the position
  * of the error bit. Otherwise if fixing failed -1 is returned. */
-static int FixSingleBitErrors(uint8_t* msg, size_t bits)
+static int FixSingleBitErrors(std::array<uint8_t, Message::LongMessageBytes>& msg, size_t bits)
 {
-    std::array<uint8_t, Message::LongMessageBits / 8> aux;
+    std::array<uint8_t, Message::LongMessageBytes> aux;    // NOLINT
 
     for (size_t j = 0; j < bits; j++)
     {
@@ -312,18 +312,19 @@ static int FixSingleBitErrors(uint8_t* msg, size_t bits)
         uint32_t crc1    = 0;
         uint32_t crc2    = 0;
 
-        memcpy(aux.data(), msg, static_cast<size_t>(bits / 8));
-        aux[byte] ^= bitmask; /* Flip j-th bit. */
+        aux = msg;
+        //        memcpy(aux, msg, );
+        aux[byte] ^= bitmask; /* Flip j-th bit. */    // NOLINT
 
-        crc1 = (uint32_t{aux[(bits / 8) - 3]} << 16) | (uint32_t{aux[(bits / 8) - 2]} << 8) | uint32_t{aux[(bits / 8) - 1]};
-        crc2 = modesChecksum(aux.data(), bits);
+        crc1 = (uint32_t{aux[(bits / 8) - 3]} << 16) | (uint32_t{aux[(bits / 8) - 2]} << 8) | uint32_t{aux[(bits / 8) - 1]};    // NOLINT
+        crc2 = ModesChecksum(aux.data(), bits);
 
         if (crc1 == crc2)
         {
             /* The error is fixed. Overwrite the original buffer with
              * the corrected sequence, and returns the error bit
              * position. */
-            memcpy(msg, aux.data(), static_cast<size_t>(bits / 8));
+            msg = aux;
             return static_cast<int>(j);
         }
     }
@@ -333,10 +334,12 @@ static int FixSingleBitErrors(uint8_t* msg, size_t bits)
 /* Similar to fixSingleBitErrors() but try every possible two bit combination.
  * This is very slow and should be tried only against DF17 messages that
  * don't pass the checksum, and only in Aggressive Mode. */
-static int FixTwoBitsErrors(uint8_t* msg, size_t bits)
+static inline int FixTwoBitsErrors(std::array<uint8_t, Message::LongMessageBytes>& msg, size_t bits)
 {
-    size_t                                         j, i;
-    std::array<uint8_t, Message::LongMessageBytes> aux;
+    size_t j = 0;
+    size_t i = 0;
+
+    std::array<uint8_t, Message::LongMessageBytes> aux;    // NOLINT
 
     for (j = 0; j < bits; j++)
     {
@@ -350,22 +353,21 @@ static int FixTwoBitsErrors(uint8_t* msg, size_t bits)
             int      bitmask2 = 1 << (7 - (i % 8));
             uint32_t crc1     = 0;
             uint32_t crc2     = 0;
-
-            memcpy(aux.data(), msg, static_cast<size_t>(bits / 8));
-
+            aux               = msg;
             aux[byte1] ^= bitmask1; /* Flip j-th bit. */    // NOLINT
             aux[byte2] ^= bitmask2; /* Flip i-th bit. */    // NOLINT
 
             crc1 = (static_cast<uint32_t>(aux[(bits / 8) - 3]) << 16) | (static_cast<uint32_t>(aux[(bits / 8) - 2]) << 8)    // NOLINT
                    | static_cast<uint32_t>(aux[(bits / 8) - 1]);
-            crc2 = modesChecksum(aux.data(), bits);
+            crc2 = ModesChecksum(aux.data(), bits);
 
             if (crc1 == crc2)
             {
                 /* The error is fixed. Overwrite the original buffer with
                  * the corrected sequence, and returns the error bit
                  * position. */
-                memcpy(msg, aux.data(), static_cast<size_t>(bits / 8));
+                msg = aux;
+                // memcpy(msg, aux, static_cast<size_t>(bits / 8));
                 /* We return the two bits as a 16 bit integer by shifting
                  * 'i' on the left. This is possible since 'i' will always
                  * be non-zero because i starts from j+1. */
@@ -391,11 +393,11 @@ static int FixTwoBitsErrors(uint8_t* msg, size_t bits)
  *
  * If the function successfully recovers a message with a correct checksum
  * it returns 1. Otherwise 0 is returned. */
-int ADSB1090Handler::BruteForceAP(uint8_t* msg, Message* mm)
+inline bool ADSB1090Handler::BruteForceAp(std::array<uint8_t, Message::LongMessageBytes> const& msg, Message& mm)
 {
-    uint8_t aux[Message::LongMessageBits];
-    int     msgtype = mm->msgtype;
-    auto    msgbits = mm->msgbits;
+    std::array<uint8_t, Message::LongMessageBytes> aux{};
+    int                                            msgtype = mm.msgtype;
+    auto                                           msgbits = mm.msgbits;
 
     if (msgtype == 0 ||  /* Short air surveillance */
         msgtype == 4 ||  /* Surveillance, altitude reply */
@@ -405,16 +407,14 @@ int ADSB1090Handler::BruteForceAP(uint8_t* msg, Message* mm)
         msgtype == 21 || /* Comm-A, identity request */
         msgtype == 24)   /* Comm-C ELM */
     {
-        size_t lastbyte = static_cast<size_t>((msgbits / 8) - 1);
+        auto lastbyte = static_cast<size_t>((msgbits / 8) - 1);
 
-        /* Work on a copy. */
-        memcpy(aux, msg, static_cast<size_t>(msgbits / 8));
-
+        aux = msg;
         /* Compute the CRC of the message and XOR it with the AP field
          * so that we recover the address, because:
          *
          * (ADDR xor CRC) xor CRC = ADDR. */
-        uint32_t crc = modesChecksum(aux, msgbits);
+        uint32_t crc = ModesChecksum(aux.data(), msgbits);
         aux[lastbyte] ^= crc & 0xff;
         aux[lastbyte - 1] ^= (crc >> 8) & 0xff;
         aux[lastbyte - 2] ^= (crc >> 16) & 0xff;
@@ -424,9 +424,9 @@ int ADSB1090Handler::BruteForceAP(uint8_t* msg, Message* mm)
         uint32_t addr = uint32_t{aux[lastbyte]} | (uint32_t{aux[lastbyte - 1]} << 8) | (uint32_t{aux[lastbyte - 2]} << 16);
         if (IcaoAddressWasRecentlySeen(addr))
         {
-            mm->aa1 = aux[lastbyte - 2];
-            mm->aa2 = aux[lastbyte - 1];
-            mm->aa3 = aux[lastbyte];
+            mm.aa1 = aux[lastbyte - 2];
+            mm.aa2 = aux[lastbyte - 1];
+            mm.aa3 = aux[lastbyte];
             return 1;
         }
     }
@@ -487,14 +487,13 @@ static inline int DecodeAC12Field(std::array<uint8_t, Message::LongMessageBytes>
 /* Decode a raw Mode S message demodulated as a stream of bytes by
  * _detectModeS(), and split it into fields populating a modesMessage
  * structure. */
-inline Message ADSB1090Handler::DecodeModesMessage(uint8_t* msgIn)
+inline Message ADSB1090Handler::DecodeModesMessage(std::array<uint8_t, Message::LongMessageBytes> const& msgIn)
 {
     Message  mm{};
     uint32_t crc2{}; /* Computed CRC, used to verify the message CRC. */
 
     /* Work on our local copy */
-    memcpy(mm.msg.data(), msgIn, Message::LongMessageBits);
-    msgIn = mm.msg.data();
+    mm.msg = msgIn;
 
     /* Get the message type ASAP as other operations depend on this */
     mm.msgtype = mm.msg[0] >> 3; /* Downlink Format */
@@ -503,7 +502,7 @@ inline Message ADSB1090Handler::DecodeModesMessage(uint8_t* msgIn)
     /* CRC is always the last three bytes. */
     mm.crc = (uint32_t{mm.msg[(mm.msgbits / 8) - 3]} << 16) | (uint32_t{mm.msg[(mm.msgbits / 8) - 2]} << 8)
              | uint32_t{mm.msg[(mm.msgbits / 8) - 1]};
-    crc2 = modesChecksum(mm.msg.data(), mm.msgbits);
+    crc2 = ModesChecksum(mm.msg.data(), mm.msgbits);
 
     /* Check CRC and fix single bit errors using the CRC when
      * possible (DF 11 and 17). */
@@ -512,14 +511,14 @@ inline Message ADSB1090Handler::DecodeModesMessage(uint8_t* msgIn)
 
     if ((mm.crcok == 0) && config.fixErrors && (mm.msgtype == 11 || mm.msgtype == 17))
     {
-        if ((mm.errorbit = FixSingleBitErrors(mm.msg.data(), mm.msgbits)) != -1)    // NOLINT
-        {                                                                           // NOLINT
-            mm.crc   = modesChecksum(mm.msg.data(), mm.msgbits);
+        if ((mm.errorbit = FixSingleBitErrors(mm.msg, mm.msgbits)) != -1)    // NOLINT
+        {                                                                    // NOLINT
+            mm.crc   = ModesChecksum(mm.msg.data(), mm.msgbits);
             mm.crcok = 1;
         }
-        else if (config.aggressive && mm.msgtype == 17 && (mm.errorbit = FixTwoBitsErrors(mm.msg.data(), mm.msgbits)) != -1)    // NOLINT
+        else if (config.aggressive && mm.msgtype == 17 && (mm.errorbit = FixTwoBitsErrors(mm.msg, mm.msgbits)) != -1)    // NOLINT
         {
-            mm.crc   = modesChecksum(mm.msg.data(), mm.msgbits);
+            mm.crc   = ModesChecksum(mm.msg.data(), mm.msgbits);
             mm.crcok = 1;
         }
     }
@@ -572,7 +571,7 @@ inline Message ADSB1090Handler::DecodeModesMessage(uint8_t* msgIn)
         /* Check if we can check the checksum for the Downlink Formats where
          * the checksum is xored with the AirCraftImpl ICAO address. We try to
          * brute force it using a list of recently seen AirCraftImpl addresses. */
-        if (BruteForceAP(mm.msg.data(), &mm) != 0)
+        if (BruteForceAp(mm.msg, mm) != 0)
         {
             /* We recovered the message, mark the checksum as valid. */
             mm.crcok = 1;
@@ -741,7 +740,7 @@ static inline void ApplyPhaseCorrection(uint16_t* m)
 void ADSB1090Handler::DetectModeS(uint16_t* m, uint32_t mlen)
 {
     uint8_t  bits[Message::LongMessageBits];
-    uint8_t  msg[Message::LongMessageBits / 2];
+    std::array<uint8_t, Message::LongMessageBytes>  msg;
     uint16_t aux[Message::LongMessageBits * 2];
     uint32_t j;
     int      use_correction = 0;
@@ -922,7 +921,7 @@ void ADSB1090Handler::DetectModeS(uint16_t* m, uint32_t mlen)
             {
                 j += (PreambleUS + (msglen * 8)) * 2;
                 good_message = 1;
-                if (use_correction) mm.phaseCorrected = 1;
+                if (use_correction) { mm.phaseCorrected = 1; }
             }
 
             /* Pass data to the next layer */
@@ -938,7 +937,7 @@ void ADSB1090Handler::DetectModeS(uint16_t* m, uint32_t mlen)
         }
 
         /* Retry with phase correction if possible. */
-        if (!good_message && !use_correction)
+        if ((good_message == 0) && !use_correction)
         {
             j--;
             use_correction = 1;
