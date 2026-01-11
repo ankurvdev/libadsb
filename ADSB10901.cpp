@@ -739,11 +739,11 @@ static inline void ApplyPhaseCorrection(uint16_t* m)
  * stream of bits and passed to the function to display it. */
 void ADSB1090Handler::DetectModeS(uint16_t* m, uint32_t mlen)
 {
-    uint8_t  bits[Message::LongMessageBits];
-    std::array<uint8_t, Message::LongMessageBytes>  msg;
-    uint16_t aux[Message::LongMessageBits * 2];
-    uint32_t j;
-    int      use_correction = 0;
+    uint8_t                                        bits[Message::LongMessageBits];
+    std::array<uint8_t, Message::LongMessageBytes> msg;
+    uint16_t                                       aux[Message::LongMessageBits * 2];
+    uint32_t                                       j;
+    int                                            use_correction = 0;
 
     /* The Mode S preamble is made of impulses of 0.5 microseconds at
      * the following time offsets:
