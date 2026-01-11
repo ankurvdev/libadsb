@@ -116,7 +116,7 @@ void dump_raw_message(char /*updown*/, uint8_t* data, int /*len*/, int /*rs_erro
         }
 #endif
     }
-    aircraft.sourceId = 2u;
+    aircraft.sourceId = ADSB::Source::UAT978;
     manager->NotifyChanged(aircraft);
 }
 // NOLINTEND(readability-magic-numbers)

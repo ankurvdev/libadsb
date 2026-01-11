@@ -142,7 +142,9 @@ struct ADSB1090Handler : RTLSDR::IDataHandler, ADSB::IDataProvider
         return lut;
     }
 
-    ADSB1090Handler(std::shared_ptr<ADSB::TrafficManager> trafficManagerIn, RTLSDR::IDeviceSelector const* selectorIn, uint8_t sourceIdIn) :
+    ADSB1090Handler(std::shared_ptr<ADSB::TrafficManager> trafficManagerIn,
+                    RTLSDR::IDeviceSelector const*        selectorIn,
+                    ADSB::Source                          sourceIdIn) :
         trafficManager(std::move(trafficManagerIn)),
         listener1090{selectorIn, RTLSDR::Config{.frequency = 1090000000, .sampleRate = 2000000}},
         sourceId(sourceIdIn)
@@ -176,8 +178,19 @@ struct ADSB1090Handler : RTLSDR::IDataHandler, ADSB::IDataProvider
         }
     }
 
-    void Start(ADSB::IListener& /*listener*/) override { listener1090.Start(this); }
-    void Stop() override { listener1090.Stop(); }
+    void OnDeviceStatusChanged(bool available) override { listener->OnDeviceStatusChanged(sourceId, available); }
+
+    void Start(ADSB::IListener& listenerIn) override
+    {
+        listener = &listenerIn;
+        listener1090.Start(this);
+    }
+    void Stop() override
+    {
+        listener = nullptr;
+        listener1090.Stop();
+    }
+
     void NotifySelfLocation(ADSB::IAirCraft const& /*unused*/) override {}
 
     /* Add the specified entry to the cache of recently seen ICAO addresses.
@@ -215,11 +228,13 @@ struct ADSB1090Handler : RTLSDR::IDataHandler, ADSB::IDataProvider
     std::shared_ptr<ADSB::TrafficManager> trafficManager;
 
     // DataRecorder<AirCraftImpl> _recorder;
+    ADSB::IListener* listener{nullptr};
+
     std::mutex        mutex;
     std::atomic<bool> stopRequested{false};
     DeviceSelector    selector;
     RTLSDR            listener1090;
-    uint8_t           sourceId{1};
+    ADSB::Source      sourceId{ADSB::Source::ADSB1090};
     /* Statistics */
     long long statValidPreamble{};
     long long statDemodulated{};
@@ -1258,14 +1273,14 @@ void ADSB1090Handler::ModesSendSBSOutput(Message const& mm, AirCraftImpl const& 
 // NOLINTEND
 std::unique_ptr<ADSB::IDataProvider> ADSB::TryCreateADSB1090Handler(std::shared_ptr<ADSB::TrafficManager> const& trafficManager,
                                                                     RTLSDR::IDeviceSelector const*               selectorIn,
-                                                                    uint8_t                                      sourceId)
+                                                                    ADSB::Source                                 sourceId)
 {
     return std::make_unique<ADSB1090Handler>(trafficManager, selectorIn, sourceId);
 }
 
 std::unique_ptr<RTLSDR::IDataHandler> ADSB::test::TryCreateADSB1090Handler(std::shared_ptr<ADSB::TrafficManager> const& trafficManager,
                                                                            RTLSDR::IDeviceSelector const*               selectorIn,
-                                                                           uint8_t                                      sourceId)
+                                                                           ADSB::Source                                 sourceId)
 {
     return std::make_unique<ADSB1090Handler>(trafficManager, selectorIn, sourceId);
 }

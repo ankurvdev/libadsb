@@ -9,7 +9,7 @@ namespace ADSB
 struct AirCraftImpl : ADSB::IAirCraft
 {
     AirCraftImpl() = default;
-    [[nodiscard]] uint8_t          SourceId() const override { return sourceId; }
+    [[nodiscard]] Source           SourceId() const override { return sourceId; }
     [[nodiscard]] uint32_t         MessageCount() const override { return 0; }
     [[nodiscard]] uint32_t         Addr() const override { return addr; }
     [[nodiscard]] std::string_view FlightNumber() const override { return {callsign.data(), callsign.size()}; }
@@ -43,8 +43,7 @@ struct AirCraftImpl : ADSB::IAirCraft
     double     cprEvenLat{};
     double     cprEvenLon{};
     time_point cprEvenTime{};
-
-    uint8_t sourceId{};
+    Source     sourceId{};
 };
 
 struct TrafficManager : std::enable_shared_from_this<TrafficManager>

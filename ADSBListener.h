@@ -11,6 +11,14 @@ SUPPRESS_WARNINGS_END
 
 namespace ADSB
 {
+
+enum class Source : uint8_t
+{
+    UAT978        = 1u,
+    ADSB1090      = 2u,
+    FlightRadar24 = 4u,
+};
+
 struct Config
 {
     std::chrono::duration<std::chrono::system_clock> ttl;
@@ -27,7 +35,7 @@ struct IAirCraft
 
     CLASS_DEFAULT_COPY_AND_MOVE(IAirCraft);
 
-    [[nodiscard]] virtual uint8_t          SourceId() const     = 0;
+    [[nodiscard]] virtual Source           SourceId() const     = 0;
     [[nodiscard]] virtual uint32_t         MessageCount() const = 0;
     [[nodiscard]] virtual uint32_t         Addr() const         = 0;
     [[nodiscard]] virtual std::string_view FlightNumber() const = 0;
@@ -47,7 +55,8 @@ struct IListener
     virtual ~IListener() = default;
     CLASS_DEFAULT_COPY_AND_MOVE(IListener);
 
-    virtual void OnChanged(IAirCraft const&) = 0;
+    virtual void OnChanged(IAirCraft const&)                            = 0;
+    virtual void OnDeviceStatusChanged(Source sourceId, bool available) = 0;
 };
 
 struct IDataProvider

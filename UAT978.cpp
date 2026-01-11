@@ -1,4 +1,5 @@
 #include "ADSB1090.h"
+#include "ADSBListener.h"
 #include "RTLSDR.hpp"
 
 #include <algorithm>
@@ -23,7 +24,9 @@ struct UAT978Handler : RTLSDR::IDataHandler, ADSB::IDataProvider
 {
     friend void DumpRawMessage(char /*updown*/, uint8_t* data, int /*len*/, int /*rs_errors*/);
 
-    UAT978Handler(std::shared_ptr<ADSB::TrafficManager> trafficManagerIn, RTLSDR::IDeviceSelector const* selectorIn, uint8_t sourceIdIn) :
+    UAT978Handler(std::shared_ptr<ADSB::TrafficManager> trafficManagerIn,
+                  RTLSDR::IDeviceSelector const*        selectorIn,
+                  ADSB::Source                          sourceIdIn) :
         trafficManager(std::move(std::move(trafficManagerIn))),
         listener978{selectorIn, RTLSDR::Config{.gain = 48, .frequency = 978000000, .sampleRate = 2083334}},
         sourceId(sourceIdIn)
@@ -58,9 +61,19 @@ struct UAT978Handler : RTLSDR::IDataHandler, ADSB::IDataProvider
         }
     }
 
-    void Start(ADSB::IListener& /*listener*/) override { listener978.Start(this); }
+    void OnDeviceStatusChanged(bool available) override { listener->OnDeviceStatusChanged(sourceId, available); }
 
-    void Stop() override { listener978.Stop(); }
+    void Start(ADSB::IListener& listenerIn) override
+    {
+        listener = &listenerIn;
+        listener978.Start(this);
+    }
+    void Stop() override
+    {
+        listener = nullptr;
+        listener978.Stop();
+    }
+
     void NotifySelfLocation(ADSB::IAirCraft const& /*unused*/) override {}
 
     void InitATan2Table()
@@ -89,26 +102,28 @@ struct UAT978Handler : RTLSDR::IDataHandler, ADSB::IDataProvider
         }
     }
 
+    ADSB::IListener* listener{nullptr};
+
     std::shared_ptr<ADSB::TrafficManager> trafficManager;
     RTLSDR                                listener978;
     size_t                                used   = 0;
     uint64_t                              offset = 0;
     std::array<uint16_t, 256 * 256>       buffer{};
     std::array<uint16_t, 256 * 256>       iqphase{};
-    uint8_t                               sourceId{2};
+    ADSB::Source                          sourceId{ADSB::Source::UAT978};
 };
 // NOLINTEND
 
 std::unique_ptr<ADSB::IDataProvider> ADSB::TryCreateUAT978Handler(std::shared_ptr<ADSB::TrafficManager> const& trafficManager,
                                                                   RTLSDR::IDeviceSelector const*               selector,
-                                                                  uint8_t                                      sourceId)
+                                                                  ADSB::Source                                 sourceId)
 {
     return std::make_unique<UAT978Handler>(trafficManager, selector, sourceId);
 }
 
 std::unique_ptr<RTLSDR::IDataHandler> ADSB::test::TryCreateUAT978Handler(std::shared_ptr<ADSB::TrafficManager> const& trafficManager,
                                                                          RTLSDR::IDeviceSelector const*               selector,
-                                                                         uint8_t                                      sourceId)
+                                                                         ADSB::Source                                 sourceId)
 {
     return std::make_unique<UAT978Handler>(trafficManager, selector, sourceId);
 }

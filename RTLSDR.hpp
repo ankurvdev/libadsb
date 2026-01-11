@@ -35,10 +35,12 @@ struct RTLSDR
 
     struct IDataHandler
     {
-        IDataHandler()                                                = default;
-        virtual ~IDataHandler()                                       = default;
-        virtual void HandleData(std::span<uint8_t const> const& data) = 0;
+        IDataHandler()          = default;
+        virtual ~IDataHandler() = default;
         CLASS_DEFAULT_COPY_AND_MOVE(IDataHandler);
+
+        virtual void HandleData(std::span<uint8_t const> const& data) = 0;
+        virtual void OnDeviceStatusChanged(bool available)            = 0;
     };
 
     static constexpr int      AutoGain        = -100;
@@ -133,6 +135,7 @@ struct RTLSDR
                         if (dev != nullptr)
                         {
                             client->_mgrctx.running = true;
+                            client->_handler->OnDeviceStatusChanged(true);
                             break;
                         }
                     }
@@ -142,6 +145,7 @@ struct RTLSDR
                 rtlsdr_read_async(dev, RTLSDR::Callback_, client, BufferCount, BufferCount * BufferLength);
                 std::unique_lock<std::mutex> guard(MgrMutex);
                 client->_mgrctx.running = false;
+                client->_handler->OnDeviceStatusChanged(false);
                 for (auto* c : clients) { Stop(guard, c); }
             }
         }

@@ -18,8 +18,8 @@ struct ADSBDataProviderImpl : ADSB::IDataProvider
 
     ADSBDataProviderImpl()
     {
-        handler978  = ADSB::TryCreateUAT978Handler(trafficManager, &rtlsdr978, 1);
-        handler1090 = ADSB::TryCreateADSB1090Handler(trafficManager, &rtlsdr1090, 2);
+        handler978  = ADSB::TryCreateUAT978Handler(trafficManager, &rtlsdr978, ADSB::Source::UAT978);
+        handler1090 = ADSB::TryCreateADSB1090Handler(trafficManager, &rtlsdr1090, ADSB::Source::ADSB1090);
     }
 
     ~ADSBDataProviderImpl() override = default;
