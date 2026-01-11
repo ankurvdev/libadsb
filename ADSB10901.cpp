@@ -1,4 +1,5 @@
 #include "ADSB.h"
+#include <stdbool.h>
 
 SUPPRESS_WARNINGS_START
 SUPPRESS_STL_WARNINGS
@@ -740,11 +741,11 @@ static inline void ApplyPhaseCorrection(uint16_t* m)
  * stream of bits and passed to the function to display it. */
 void ADSB1090Handler::DetectModeS(uint16_t* m, uint32_t mlen)
 {
-    uint8_t                                        bits[Message::LongMessageBits];
-    std::array<uint8_t, Message::LongMessageBytes> msg;
-    uint16_t                                       aux[Message::LongMessageBits * 2];
-    uint32_t                                       j;
-    int                                            useCorrection = 0;
+    std::array<uint8_t, Message::LongMessageBits>      bits{};
+    std::array<uint8_t, Message::LongMessageBytes>     msg{};
+    std::array<uint16_t, Message::LongMessageBits * 2> aux{};
+
+    bool useCorrection = false;
 
     /* The Mode S preamble is made of impulses of 0.5 microseconds at
      * the following time offsets:
@@ -769,7 +770,7 @@ void ADSB1090Handler::DetectModeS(uint16_t* m, uint32_t mlen)
      * 8   --
      * 9   -------------------
      */
-    for (j = 0; j < mlen - FullLength * 2; j++)
+    for (uint32_t j = 0; j < mlen - FullLength * 2; j++)
     {
         int low, high, delta, errors;
         int goodMessage = 0;
@@ -808,14 +809,14 @@ void ADSB1090Handler::DetectModeS(uint16_t* m, uint32_t mlen)
             //    dumpRawMessage("Too high level in samples between 10 and 15", msg, m, j);
             continue;
         }
-        //_stat_valid_preamble++;
+        statValidPreamble++;
 
     good_preamble:
         /* If the previous attempt with this message failed, retry using
          * magnitude correction. */
         if (useCorrection)
         {
-            memcpy(aux, m + j + PreambleUS * 2, sizeof(aux));
+            memcpy(aux.data(), m + j + PreambleUS * 2, sizeof(aux));
             if (j && DetectOutOfPhase(m + j))
             {
                 ApplyPhaseCorrection(m + j);
@@ -832,16 +833,16 @@ void ADSB1090Handler::DetectModeS(uint16_t* m, uint32_t mlen)
             low   = m[j + i + PreambleUS * 2];
             high  = m[j + i + PreambleUS * 2 + 1];
             delta = low - high;
-            if (delta < 0) delta = -delta;
+            if (delta < 0) { delta = -delta; }
 
-            if (i > 0 && delta < 256) { bits[i / 2] = bits[i / 2 - 1]; }
+            if (i > 0 && delta < 256) { bits[i / 2] = bits[(i / 2) - 1]; }
             else if (low == high)
             {
                 /* Checking if two adiacent samples have the same magnitude
                  * is an effective way to detect if it's just random noise
                  * that was detected as a valid preamble. */
                 bits[i / 2] = 2; /* error */
-                if (i < Message::ShortMessageBits * 2) errors++;
+                if (i < Message::ShortMessageBits * 2) { errors++; }
             }
             else if (low > high) { bits[i / 2] = 1; }
             else
@@ -852,7 +853,7 @@ void ADSB1090Handler::DetectModeS(uint16_t* m, uint32_t mlen)
         }
 
         /* Restore the original message if we used magnitude correction. */
-        if (useCorrection) memcpy(m + j + PreambleUS * 2, aux, sizeof(aux));
+        if (useCorrection) memcpy(m + j + PreambleUS * 2, aux.data(), sizeof(aux));
 
         /* Pack bits into bytes */
         for (size_t i = 0; i < Message::LongMessageBits; i += 8)
@@ -875,7 +876,7 @@ void ADSB1090Handler::DetectModeS(uint16_t* m, uint32_t mlen)
          * random noise. */
         if (delta < 10 * 255)
         {
-            useCorrection = 0;
+            useCorrection = false;
             continue;
         }
 
@@ -913,7 +914,7 @@ void ADSB1090Handler::DetectModeS(uint16_t* m, uint32_t mlen)
             }
 #if 0
             /* Output debug mode info if needed. */
-            if (useCorrection == 0)
+            if (use_correction == 0)
             {
                 if (Modes.debug & MODES_DEBUG_DEMOD)
                     dumpRawMessage("Demodulated with 0 errors", msg, m, j);
