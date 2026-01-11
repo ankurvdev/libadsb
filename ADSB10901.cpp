@@ -1,5 +1,4 @@
 #include "ADSB.h"
-#include <stdbool.h>
 
 SUPPRESS_WARNINGS_START
 SUPPRESS_STL_WARNINGS
@@ -172,7 +171,7 @@ struct ADSB1090Handler : RTLSDR::IDataHandler, ADSB::IDataProvider
             if (q < 0) q = -q;
             m[j / 2] = magnitudesLookupTable[static_cast<size_t>(i * 129 + q)];
         }
-        DetectModeS(m, static_cast<uint32_t>(data.size() / 2));
+        DetectModeS({m, static_cast<uint32_t>(data.size() / 2)});
     }
 
     void OnDeviceStatusChanged(bool available) override { listener->OnDeviceStatusChanged(sourceId, available); }
@@ -209,7 +208,7 @@ struct ADSB1090Handler : RTLSDR::IDataHandler, ADSB::IDataProvider
 
     bool                BruteForceAp(std::array<uint8_t, Message::LongMessageBytes> const& msg, Message& mm);
     Message             DecodeModesMessage(std::array<uint8_t, Message::LongMessageBytes> const& msgIn);
-    void                DetectModeS(uint16_t* m, uint32_t mlen);
+    void                DetectModeS(std::span<uint16_t> const& m);
     ADSB::AirCraftImpl& InteractiveReceiveData(Message const& mm);
     ADSB::AirCraftImpl& InteractiveFindOrCreateAircraft(uint32_t addr);
     void                UseModesMessage(Message const& mm);
@@ -739,7 +738,7 @@ static inline void ApplyPhaseCorrection(uint16_t* m)
 /* Detect a Mode S messages inside the magnitude buffer pointed by 'm' and of
  * size 'mlen' bytes. Every detected Mode S message is convert it into a
  * stream of bits and passed to the function to display it. */
-void ADSB1090Handler::DetectModeS(uint16_t* m, uint32_t mlen)
+void ADSB1090Handler::DetectModeS(std::span<uint16_t> const& m)
 {
     std::array<uint8_t, Message::LongMessageBits>      bits{};
     std::array<uint8_t, Message::LongMessageBytes>     msg{};
@@ -770,7 +769,7 @@ void ADSB1090Handler::DetectModeS(uint16_t* m, uint32_t mlen)
      * 8   --
      * 9   -------------------
      */
-    for (uint32_t j = 0; j < mlen - FullLength * 2; j++)
+    for (uint32_t j = 0; j < m.size() - FullLength * 2; j++)
     {
         int low, high, delta, errors;
         int goodMessage = 0;
@@ -780,8 +779,8 @@ void ADSB1090Handler::DetectModeS(uint16_t* m, uint32_t mlen)
         /* First check of relations between the first 10 samples
          * representing a valid preamble. We don't even investigate further
          * if this simple test is not passed. */
-        if (!(m[j] > m[j + 1] && m[j + 1] < m[j + 2] && m[j + 2] > m[j + 3] && m[j + 3] < m[j] && m[j + 4] < m[j] && m[j + 5] < m[j]
-              && m[j + 6] < m[j] && m[j + 7] > m[j + 8] && m[j + 8] < m[j + 9] && m[j + 9] > m[j + 6]))
+        if (m[j] <= m[j + 1] || m[j + 1] >= m[j + 2] || m[j + 2] <= m[j + 3] || m[j + 3] >= m[j] || m[j + 4] >= m[j] || m[j + 5] >= m[j]
+            || m[j + 6] >= m[j] || m[j + 7] <= m[j + 8] || m[j + 8] >= m[j + 9] || m[j + 9] <= m[j + 6])
         {
             // if (Modes.debug & MODES_DEBUG_NOPREAMBLE && m[j] > MODES_DEBUG_NOPREAMBLE_LEVEL)
             // dumpRawMessage("Unexpected ratio among first 10 samples", msg, m, j);
@@ -793,7 +792,7 @@ void ADSB1090Handler::DetectModeS(uint16_t* m, uint32_t mlen)
          * the high levels as signals can be out of phase so part of the
          * energy can be in the near samples. */
         high = (m[j] + m[j + 2] + m[j + 7] + m[j + 9]) / 6;
-        if (m[j + 4] >= high || m[j + 5] >= high)
+        if (std::cmp_greater_equal(m[j + 4], high) || std::cmp_greater_equal(m[j + 5], high))
         {
             // if (Modes.debug & MODES_DEBUG_NOPREAMBLE && m[j] > MODES_DEBUG_NOPREAMBLE_LEVEL)
             //    dumpRawMessage("Too high level in samples between 3 and 6", msg, m, j);
@@ -803,7 +802,8 @@ void ADSB1090Handler::DetectModeS(uint16_t* m, uint32_t mlen)
         /* Similarly samples in the range 11-14 must be low, as it is the
          * space between the preamble and real data. Again we don't test
          * bits too near to high levels, see above. */
-        if (m[j + 11] >= high || m[j + 12] >= high || m[j + 13] >= high || m[j + 14] >= high)
+        if (std::cmp_greater_equal(m[j + 11], high) || std::cmp_greater_equal(m[j + 12], high) || std::cmp_greater_equal(m[j + 13], high)
+            || std::cmp_greater_equal(m[j + 14], high))
         {
             // if (Modes.debug & MODES_DEBUG_NOPREAMBLE && m[j] > MODES_DEBUG_NOPREAMBLE_LEVEL)
             //    dumpRawMessage("Too high level in samples between 10 and 15", msg, m, j);
@@ -816,11 +816,11 @@ void ADSB1090Handler::DetectModeS(uint16_t* m, uint32_t mlen)
          * magnitude correction. */
         if (useCorrection)
         {
-            memcpy(aux.data(), m + j + PreambleUS * 2, sizeof(aux));
-            if (j && DetectOutOfPhase(m + j))
+            memcpy(aux.data(), m.data() + j + PreambleUS * 2, sizeof(aux));
+            if (j && DetectOutOfPhase(m.data() + j))
             {
-                ApplyPhaseCorrection(m + j);
-                // _stat_out_of_phase++;
+                ApplyPhaseCorrection(m.data() + j);
+                statOutOfPhase++;
             }
             /* TODO ... apply other kind of corrections. */
         }
@@ -853,7 +853,7 @@ void ADSB1090Handler::DetectModeS(uint16_t* m, uint32_t mlen)
         }
 
         /* Restore the original message if we used magnitude correction. */
-        if (useCorrection) memcpy(m + j + PreambleUS * 2, aux.data(), sizeof(aux));
+        if (useCorrection) memcpy(m.data() + j + PreambleUS * 2, aux.data(), sizeof(aux));
 
         /* Pack bits into bytes */
         for (size_t i = 0; i < Message::LongMessageBits; i += 8)
