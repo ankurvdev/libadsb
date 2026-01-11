@@ -110,13 +110,12 @@ endif()
 target_link_libraries(dump978 PRIVATE rtlsdr::rtlsdr)
 
 add_library(adsb STATIC
-    ADSB1090.h
     ADSBListener.h
     AircraftImpl.h
     CommonMacros.h
     SetThreadName.h
     UAT978.cpp
-    ADSB1090.cpp
+    ADSB10901.cpp
     ADSBListener.cpp
     )
 
@@ -142,6 +141,9 @@ if (libadsb_BUILD_TESTING AND BUILD_TESTING)
     file(DOWNLOAD https://github.com/antirez/dump1090/raw/refs/heads/master/testfiles/modes1.bin ${CMAKE_CURRENT_BINARY_DIR}/modes1.bin)
     find_package(EmbedResource REQUIRED)
     target_add_resource(unittest_1090 RESOURCE_COLLECTION_NAME traces RESOURCES "${CMAKE_CURRENT_BINARY_DIR}/modes1.bin")
+    file(GLOB testdata "tests/testdata/*")
+    target_add_resource(unittest_1090 RESOURCE_COLLECTION_NAME testdata RESOURCES ${testdata})
+
     target_include_directories(unittest_1090 PRIVATE .)
     target_link_libraries(unittest_1090 PRIVATE Catch2::Catch2WithMain dtl::dtl fmt::fmt adsb)
     target_compile_definitions(unittest_1090 PRIVATE HAVE_EMBEDRESOURCE=1)

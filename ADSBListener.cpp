@@ -1,6 +1,4 @@
-#include "ADSBListener.h"
-#include "ADSB1090.h"
-#include "RTLSDR.hpp"
+#include "ADSB.h"
 
 struct ADSBDataProviderImpl : ADSB::IDataProvider
 {

@@ -5,7 +5,7 @@ include(GenerateExportHeader)
 set(BuildEnvCMAKE_LOCATION "${CMAKE_CURRENT_LIST_DIR}")
 
 # Fix for error
-#"CMAKE_CXX_COMPILER_CLANG_SCAN_DEPS-NOTFOUND" -format=p1689 -- /usr/bin/c++ -x c++ ... 
+#"CMAKE_CXX_COMPILER_CLANG_SCAN_DEPS-NOTFOUND" -format=p1689 -- /usr/bin/c++ -x c++ ...
 #/bin/sh: 1: CMAKE_CXX_COMPILER_CLANG_SCAN_DEPS-NOTFOUND: not found
 # https://discourse.cmake.org/t/cmake-3-28-cmake-cxx-compiler-clang-scan-deps-notfound-not-found/9244/2
 set(CMAKE_CXX_SCAN_FOR_MODULES 0)
@@ -25,11 +25,11 @@ macro(_PrintFlags)
             CMAKE_EXE_LINKER_FLAGS CMAKE_SHARED_LINKER_FLAGS
             CMAKE_INTERPROCEDURAL_OPTIMIZATION)
         foreach(variantstr _INIT
-                    "               "
-                    "_DEBUG         "
-                    "_RELEASE       "
+                    ""
+                    "_DEBUG"
+                    "_RELEASE"
                     "_RELWITHDEBINFO"
-                    "_MINSIZEREL    ")
+                    "_MINSIZEREL")
             set(varname ${flagname}${variantstr})
             message(STATUS "${varname}:${${varname}}")
         endforeach()
@@ -120,6 +120,15 @@ macro(EnableStrictCompilation)
         set(Threads_FOUND 1)
         # set(CMAKE_EXECUTABLE_SUFFIX ".html")
         set(CMAKE_CXX_COMPILE_OPTIONS_IPO "-flto=full")
+    endif()
+
+    if (CMAKE_CROSSCOMPILING)
+        if (EMSCRIPTEN)
+            find_program(NODE_JS_EXECUTABLE NAMES nodejs node)
+            if(NODE_JS_EXECUTABLE)
+                set(CMAKE_CROSSCOMPILING_EMULATOR ${NODE_JS_EXECUTABLE})
+            endif()
+        endif()
     endif()
 
     if (CMAKE_CXX_COMPILER_LOADED)
@@ -226,8 +235,17 @@ macro(EnableStrictCompilation)
                 # -std=c++20 via CMAKE_CXX_STANDARD
                 # -fvisibility-inlines-hidden via CMAKE_VISIBILITY_INLINES_HIDDEN
             )
-
-            if (CMAKE_LINKER_TYPE STREQUAL GNU)
+            if (APPLE AND CMAKE_LINKER_TYPE STREQUAL GNU)
+                message(WARNING "GNU linked on apple can sometimes cause issues. Consider using CMAKE_LINKER_TYPE=LLD")
+            endif()
+            if (APPLE AND ("${CMAKE_LINKER_TYPE}" STREQUAL "") AND ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang"))
+                find_program(LLVM_LD_EXECUTABLE NAMES "ld.lld" "ld64.lld" "lld")
+                if (LLVM_LD_EXECUTABLE AND EXISTS "${LLVM_LD_EXECUTABLE}")
+                    message(STATUS "Using lld from ${LLVM_LD_EXECUTABLE} as linker")
+                    set(CMAKE_LINKER_TYPE LLD)
+                endif()
+            endif()
+            if (CMAKE_LINKER_TYPE STREQUAL GNU OR "${CMAKE_LINKER_TYPE}" STREQUAL "")
                 string(APPEND CMAKE_SHARED_LINKER_FLAGS " -Wl,--exclude-libs,ALL -Wl,--no-undefined -Wl,--gc-sections")
                 string(APPEND CMAKE_EXE_LINKER_FLAGS " -Wl,--exclude-libs,ALL -Wl,--no-undefined -Wl,--gc-sections")
             endif()
@@ -239,7 +257,7 @@ macro(EnableStrictCompilation)
                 list(APPEND extraflags -pthread -Wno-limited-postlink-optimizations -sASYNCIFY)
                 # string(APPEND CMAKE_LINKER_FLAGS " -Wl,-u,htonl -Wl,-u,htons")
                 #TODO https://github.com/emscripten-core/emscripten/issues/16836
-                #list(APPEND extraflags -Wl,-u,htonl -Wl,-u,htons ) 
+                #list(APPEND extraflags -Wl,-u,htonl -Wl,-u,htons )
             endif()
             if ("${CMAKE_CXX_COMPILER_ID}" MATCHES Clang)
                 if ((NOT DEFINED CLANG_TIDY_MODE) OR ("${CLANG_TIDY_MODE}" STREQUAL ""))
@@ -284,6 +302,7 @@ macro(EnableStrictCompilation)
                     -Wno-unsafe-buffer-usage
                     -Wno-disabled-macro-expansion # fmt::print(stderr, ...)
                     -Wno-nrvo # clang-21
+                    -Wno-thread-safety-negative # clang-21
                     )
             else()
                 list(APPEND extracxxflags -Wno-error=stringop-overflow)
@@ -306,8 +325,11 @@ macro(EnableStrictCompilation)
                 -Wno-nrvo # clang-21
             )
 
-            if (APPLE)
-                list(APPEND extracxxflags -Wno-poison-system-directories)
+            if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "AppleClang" AND NOT CMAKE_CROSSCOMPILING)
+                # AppleClang automatically adds /usr/local/include if an explicit sdk path isnt provided
+                # including /usr/local/include triggers a Wpoison-include-directories with clang
+                execute_process(COMMAND_ERROR_IS_FATAL ANY COMMAND xcrun --show-sdk-path OUTPUT_VARIABLE MACOS_SDK_PATH OUTPUT_STRIP_TRAILING_WHITESPACE)
+                list(APPEND extraflags --sysroot="${MACOS_SDK_PATH}")
             endif()
 
             if (NOT DEFINED CPPFORGE_DISABLE_MARCH_NATIVE AND DEFINED ENV{CPPFORGE_DISABLE_MARCH_NATIVE})

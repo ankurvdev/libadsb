@@ -1,16 +1,14 @@
-#include "ADSB1090.h"
-#include "AircraftImpl.h"
-#include "RTLSDR.hpp"
-
+#include "ADSB.h"
 #include "TestUtils.h"
+
 #include <fmt/base.h>
 #include <fmt/std.h>
 
 #include <filesystem>
 #include <memory>
-#include <string>
 
 DECLARE_RESOURCE_COLLECTION(traces);
+DECLARE_RESOURCE_COLLECTION(testdata);
 
 template <> struct fmt::formatter<ADSB::IAirCraft> : fmt::formatter<std::string_view>
 {
@@ -37,9 +35,15 @@ struct Listener : ADSB::IListener
     void OnChanged(ADSB::IAirCraft const& a) override
     {
         auto msg = fmt::format("{}", a);
+        if (index < reference.size()) { REQUIRE(reference[index] == msg); }
+        index++;
         messages.push_back(msg);
         status[a.Addr()] = msg;
     }
+    void OnDeviceStatusChanged(ADSB::Source /* source */, bool /* available */) override {}
+
+    size_t                                    index;
+    std::vector<std::string>                  reference;
     std::vector<std::string>                  messages;
     std::unordered_map<uint32_t, std::string> status;
 };
@@ -59,8 +63,9 @@ TEST_CASE("TestEmbedded", "[1090]")
         auto     mgr = std::make_shared<ADSB::TrafficManager>();
         mgr->SetListener(&listener);
         Selector selector;
-        auto     handler = ADSB::test::TryCreateADSB1090Handler(mgr, &selector, 1);
+        auto     handler = ADSB::test::TryCreateADSB1090Handler(mgr, &selector, ADSB::Source::ADSB1090);
         handler->HandleData(res.data<uint8_t>());
+        TestCommon::CheckResource<TestCommon::StrFormat>(listener.messages, res.name());
     }
     // REQUIRE(!pidlfiles.empty());
     // REQUIRE_NOTHROW(RunTest(pidlfiles));
@@ -91,6 +96,7 @@ template <typename TLambda> static void BufferedFileRead(std::filesystem::path c
         callback(buffers[bufferToUse]);
         bufferToUse = (bufferToUse + 1) % BufferCount;
     }
+
     ifs.close();
 }
 
@@ -111,9 +117,9 @@ static void RunTestWithFile(std::filesystem::path const& fpath)
     auto     mgr = std::make_shared<ADSB::TrafficManager>();
     mgr->SetListener(&listener);
     Selector selector;
-    auto     handler = creator(mgr, &selector, 1);
+    auto     handler = creator(mgr, &selector, ADSB::Source::UAT978);
     BufferedFileRead(fpath, 1, [&](auto const& buf) { handler->HandleData(buf); });
-    fmt::print("{}\n\n", fmt::join(listener.messages, "\n"));
+    TestCommon::CheckResource<TestCommon::StrFormat>(listener.messages, fpath.filename().stem().string());
 }
 
 TEST_CASE("TestEnv", "[1090]")

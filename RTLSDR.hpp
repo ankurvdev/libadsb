@@ -47,8 +47,8 @@ struct RTLSDR
     static constexpr int      MaxGain         = 999999;
     static constexpr int      CorrectionPPM   = 0;
     static constexpr uint32_t SampleRate      = 0;    // Invalid
-    static constexpr size_t   BufferLength    = 65536;
-    static constexpr size_t   BufferCount     = 4;
+    static constexpr size_t   BufferLength    = size_t{65536u} * 4u;
+    static constexpr size_t   BufferCount     = 16;
     static constexpr uint32_t CenterFrequency = 0;
 
     struct Config

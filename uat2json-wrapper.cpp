@@ -6,7 +6,8 @@ extern "C"
 #include "dump978/legacy/uat_decode.h"
     void dump_raw_message(char updown, uint8_t* data, int len, int rsErrors);    // NOLINT
 }
-#include "ADSB1090.h"
+#include "ADSB.h"
+
 #include <algorithm>
 #include <iostream>
 

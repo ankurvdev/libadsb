@@ -27,6 +27,7 @@ struct ADSBTrackerImpl : ADSB::IListener
         std::cout << a.FlightNumber() << ":" << std::hex << a.Addr() << ":" << std::dec << " Speed:" << a.Speed() << " Alt:" << a.Altitude()
                   << " Heading:" << a.Heading() << " Climb:" << a.Climb() << " Lat:" << a.Lat1E7() << " Lon:" << a.Lon1E7() << '\n';
     }
+    void OnDeviceStatusChanged(ADSB::Source /* source */, bool /* available */) override {}
 
     std::unordered_map<uint32_t, std::chrono::system_clock::time_point> icaoTimestamps;
     std::unordered_map<uint32_t, size_t>                                aircrafts;
