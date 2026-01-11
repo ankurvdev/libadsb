@@ -274,7 +274,7 @@ static constexpr auto ModesChecksumTable = std::array<uint32_t, 112>{
     0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000,
     0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000};
 
-static uint32_t ModesChecksum(uint8_t* msg, size_t bits)
+static uint32_t ModesChecksum(std::array<uint8_t, Message::LongMessageBytes> const& msg, size_t bits)
 {
     uint32_t crc    = 0;
     size_t   offset = (bits == 112) ? 0u : (112u - 56u);
@@ -317,7 +317,7 @@ static int FixSingleBitErrors(std::array<uint8_t, Message::LongMessageBytes>& ms
         aux[byte] ^= bitmask; /* Flip j-th bit. */    // NOLINT
 
         crc1 = (uint32_t{aux[(bits / 8) - 3]} << 16) | (uint32_t{aux[(bits / 8) - 2]} << 8) | uint32_t{aux[(bits / 8) - 1]};    // NOLINT
-        crc2 = ModesChecksum(aux.data(), bits);
+        crc2 = ModesChecksum(aux, bits);
 
         if (crc1 == crc2)
         {
@@ -359,7 +359,7 @@ static inline int FixTwoBitsErrors(std::array<uint8_t, Message::LongMessageBytes
 
             crc1 = (static_cast<uint32_t>(aux[(bits / 8) - 3]) << 16) | (static_cast<uint32_t>(aux[(bits / 8) - 2]) << 8)    // NOLINT
                    | static_cast<uint32_t>(aux[(bits / 8) - 1]);
-            crc2 = ModesChecksum(aux.data(), bits);
+            crc2 = ModesChecksum(aux, bits);
 
             if (crc1 == crc2)
             {
@@ -396,8 +396,9 @@ static inline int FixTwoBitsErrors(std::array<uint8_t, Message::LongMessageBytes
 inline bool ADSB1090Handler::BruteForceAp(std::array<uint8_t, Message::LongMessageBytes> const& msg, Message& mm)
 {
     std::array<uint8_t, Message::LongMessageBytes> aux{};
-    int                                            msgtype = mm.msgtype;
-    auto                                           msgbits = mm.msgbits;
+
+    int  msgtype = mm.msgtype;
+    auto msgbits = mm.msgbits;
 
     if (msgtype == 0 ||  /* Short air surveillance */
         msgtype == 4 ||  /* Surveillance, altitude reply */
@@ -414,7 +415,7 @@ inline bool ADSB1090Handler::BruteForceAp(std::array<uint8_t, Message::LongMessa
          * so that we recover the address, because:
          *
          * (ADDR xor CRC) xor CRC = ADDR. */
-        uint32_t crc = ModesChecksum(aux.data(), msgbits);
+        uint32_t crc = ModesChecksum(aux, msgbits);
         aux[lastbyte] ^= crc & 0xff;
         aux[lastbyte - 1] ^= (crc >> 8) & 0xff;
         aux[lastbyte - 2] ^= (crc >> 16) & 0xff;
@@ -502,7 +503,7 @@ inline Message ADSB1090Handler::DecodeModesMessage(std::array<uint8_t, Message::
     /* CRC is always the last three bytes. */
     mm.crc = (uint32_t{mm.msg[(mm.msgbits / 8) - 3]} << 16) | (uint32_t{mm.msg[(mm.msgbits / 8) - 2]} << 8)
              | uint32_t{mm.msg[(mm.msgbits / 8) - 1]};
-    crc2 = ModesChecksum(mm.msg.data(), mm.msgbits);
+    crc2 = ModesChecksum(mm.msg, mm.msgbits);
 
     /* Check CRC and fix single bit errors using the CRC when
      * possible (DF 11 and 17). */
@@ -513,12 +514,12 @@ inline Message ADSB1090Handler::DecodeModesMessage(std::array<uint8_t, Message::
     {
         if ((mm.errorbit = FixSingleBitErrors(mm.msg, mm.msgbits)) != -1)    // NOLINT
         {                                                                    // NOLINT
-            mm.crc   = ModesChecksum(mm.msg.data(), mm.msgbits);
+            mm.crc   = ModesChecksum(mm.msg, mm.msgbits);
             mm.crcok = 1;
         }
         else if (config.aggressive && mm.msgtype == 17 && (mm.errorbit = FixTwoBitsErrors(mm.msg, mm.msgbits)) != -1)    // NOLINT
         {
-            mm.crc   = ModesChecksum(mm.msg.data(), mm.msgbits);
+            mm.crc   = ModesChecksum(mm.msg, mm.msgbits);
             mm.crcok = 1;
         }
     }
@@ -743,7 +744,7 @@ void ADSB1090Handler::DetectModeS(uint16_t* m, uint32_t mlen)
     std::array<uint8_t, Message::LongMessageBytes> msg;
     uint16_t                                       aux[Message::LongMessageBits * 2];
     uint32_t                                       j;
-    int                                            use_correction = 0;
+    int                                            useCorrection = 0;
 
     /* The Mode S preamble is made of impulses of 0.5 microseconds at
      * the following time offsets:
@@ -771,9 +772,9 @@ void ADSB1090Handler::DetectModeS(uint16_t* m, uint32_t mlen)
     for (j = 0; j < mlen - FullLength * 2; j++)
     {
         int low, high, delta, errors;
-        int good_message = 0;
+        int goodMessage = 0;
 
-        if (use_correction) goto good_preamble; /* We already checked it. */
+        if (useCorrection) goto good_preamble; /* We already checked it. */
 
         /* First check of relations between the first 10 samples
          * representing a valid preamble. We don't even investigate further
@@ -812,7 +813,7 @@ void ADSB1090Handler::DetectModeS(uint16_t* m, uint32_t mlen)
     good_preamble:
         /* If the previous attempt with this message failed, retry using
          * magnitude correction. */
-        if (use_correction)
+        if (useCorrection)
         {
             memcpy(aux, m + j + PreambleUS * 2, sizeof(aux));
             if (j && DetectOutOfPhase(m + j))
@@ -851,7 +852,7 @@ void ADSB1090Handler::DetectModeS(uint16_t* m, uint32_t mlen)
         }
 
         /* Restore the original message if we used magnitude correction. */
-        if (use_correction) memcpy(m + j + PreambleUS * 2, aux, sizeof(aux));
+        if (useCorrection) memcpy(m + j + PreambleUS * 2, aux, sizeof(aux));
 
         /* Pack bits into bytes */
         for (size_t i = 0; i < Message::LongMessageBits; i += 8)
@@ -874,7 +875,7 @@ void ADSB1090Handler::DetectModeS(uint16_t* m, uint32_t mlen)
          * random noise. */
         if (delta < 10 * 255)
         {
-            use_correction = 0;
+            useCorrection = 0;
             continue;
         }
 
@@ -886,26 +887,33 @@ void ADSB1090Handler::DetectModeS(uint16_t* m, uint32_t mlen)
             Message mm = DecodeModesMessage(msg);
 
             /* Decode the received message and update statistics */
-#if 0
+
             /* Update statistics. */
-            if (mm.crcok || use_correction)
+            if ((mm.crcok != 0) || (static_cast<int>(useCorrection) != 0))
             {
-                if (errors == 0) _stat_demodulated++;
+                if (errors == 0) { statDemodulated++; }
                 if (mm.errorbit == -1)
                 {
-                    if (mm.crcok) _stat_goodcrc++;
-                    else _stat_badcrc++;
+                    if (mm.crcok != 0) { statGoodcrc++; }
+                    else
+                    {
+                        statBadcrc++;
+                    }
                 }
                 else
                 {
-                    _stat_badcrc++;
-                    _stat_fixed++;
-                    if (mm.errorbit < static_cast<int>(Message::LongMessageBits)) _stat_single_bit_fix++;
-                    else _stat_two_bits_fix++;
+                    statBadcrc++;
+                    statFixed++;
+                    if (std::cmp_less(mm.errorbit, Message::LongMessageBits)) { statSingleBitFix++; }
+                    else
+                    {
+                        statTwoBitsFix++;
+                    }
                 }
             }
+#if 0
             /* Output debug mode info if needed. */
-            if (use_correction == 0)
+            if (useCorrection == 0)
             {
                 if (Modes.debug & MODES_DEBUG_DEMOD)
                     dumpRawMessage("Demodulated with 0 errors", msg, m, j);
@@ -917,11 +925,11 @@ void ADSB1090Handler::DetectModeS(uint16_t* m, uint32_t mlen)
 #endif
 
             /* Skip this message if we are sure it's fine. */
-            if (mm.crcok)
+            if (mm.crcok != 0)
             {
                 j += (PreambleUS + (msglen * 8)) * 2;
-                good_message = 1;
-                if (use_correction) { mm.phaseCorrected = 1; }
+                goodMessage = 1;
+                if (useCorrection) { mm.phaseCorrected = 1; }
             }
 
             /* Pass data to the next layer */
@@ -929,7 +937,7 @@ void ADSB1090Handler::DetectModeS(uint16_t* m, uint32_t mlen)
         }
         else
         {
-            if (config.debug && use_correction)
+            if (config.debug && useCorrection)
             {
                 // printf("The following message has %d demod errors\n", errors);
                 // dumpRawMessage("Demodulated with errors", msg, m, j);
@@ -937,14 +945,14 @@ void ADSB1090Handler::DetectModeS(uint16_t* m, uint32_t mlen)
         }
 
         /* Retry with phase correction if possible. */
-        if ((good_message == 0) && !use_correction)
+        if ((goodMessage == 0) && !useCorrection)
         {
             j--;
-            use_correction = 1;
+            useCorrection = true;
         }
         else
         {
-            use_correction = 0;
+            useCorrection = false;
         }
     }
 }
