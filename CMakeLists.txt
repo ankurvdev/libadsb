@@ -121,7 +121,7 @@ add_library(adsb STATIC
     CommonMacros.h
     SetThreadName.h
     UAT978.cpp
-    ADSB10901.cpp
+    ADSB1090.cpp
     ADSBListener.cpp
     )
 

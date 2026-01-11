@@ -157,24 +157,21 @@ struct ADSB1090Handler : RTLSDR::IDataHandler, ADSB::IDataProvider
 
     void HandleData(std::span<uint8_t const> const& data) override
     {
-        for (size_t k = 0; k < data.size(); k += BufferLength)    // NOLINT
+        uint16_t* m = magnitudeVector.data();
+        auto*     p = data.data();
+
+        /* Compute the magnitudo vector. It's just SQRT(I^2 + Q^2), but
+         * we rescale to the 0-255 range to exploit the full resolution. */
+        for (uint32_t j = 0; j < data.size(); j += 2)
         {
-            auto const* p    = data.data() + k;    // NOLINT
-            auto        size = std::min(BufferLength, data.size());
+            int i = p[j] - 127;
+            int q = p[j + 1] - 127;
 
-            /* Compute the magnitudo vector. It's just SQRT(I^2 + Q^2), but
-             * we rescale to the 0-255 range to exploit the full resolution. */
-            for (uint32_t j = 0; j < size; j += 2)
-            {
-                int i = p[j] - 127;        // NOLINT
-                int q = p[j + 1] - 127;    // NOLINT
-
-                if (i < 0) { i = -i; }
-                if (q < 0) { q = -q; }
-                magnitudeVector[j / 2] = magnitudesLookupTable[static_cast<size_t>((i * 129) + q)];    // NOLINT
-            }
-            DetectModeS(std::span<uint16_t>(magnitudeVector.data(), static_cast<uint32_t>(size / 2)));
+            if (i < 0) i = -i;
+            if (q < 0) q = -q;
+            m[j / 2] = magnitudesLookupTable[static_cast<size_t>(i * 129 + q)];
         }
+        DetectModeS({m, static_cast<uint32_t>(data.size() / 2)});
     }
 
     void OnDeviceStatusChanged(bool available) override { listener->OnDeviceStatusChanged(sourceId, available); }
@@ -209,14 +206,14 @@ struct ADSB1090Handler : RTLSDR::IDataHandler, ADSB::IDataProvider
                && (std::chrono::system_clock::now() - it->second) <= std::chrono::seconds{ModesIcaoCacheTtlInSecs};
     }
 
-    int                 BruteForceAp(std::array<uint8_t, Message::LongMessageBytes> const& msg, Message& mm);
+    bool                BruteForceAp(std::array<uint8_t, Message::LongMessageBytes> const& msg, Message& mm);
     Message             DecodeModesMessage(std::array<uint8_t, Message::LongMessageBytes> const& msgIn);
     void                DetectModeS(std::span<uint16_t> const& m);
     ADSB::AirCraftImpl& InteractiveReceiveData(Message const& mm);
     ADSB::AirCraftImpl& InteractiveFindOrCreateAircraft(uint32_t addr);
+    void                UseModesMessage(Message const& mm);
+    void                ModesSendSbsOutput(Message const& mm, ADSB::AirCraftImpl& a);
 
-    void                                                                UseModesMessage(Message const& mm);
-    void                                                                ModesSendSbsOutput(Message const& mm, ADSB::AirCraftImpl& a);
     std::unordered_map<uint32_t, std::chrono::system_clock::time_point> icaoTimestamps;
 
     Config                config{};
@@ -315,8 +312,7 @@ static int FixSingleBitErrors(std::array<uint8_t, Message::LongMessageBytes>& ms
         uint32_t crc1    = 0;
         uint32_t crc2    = 0;
 
-        std::copy_n(msg.begin(), static_cast<size_t>(bits / 8), aux.begin());
-
+        aux = msg;
         //        memcpy(aux, msg, );
         aux[byte] ^= bitmask; /* Flip j-th bit. */    // NOLINT
 
@@ -328,7 +324,7 @@ static int FixSingleBitErrors(std::array<uint8_t, Message::LongMessageBytes>& ms
             /* The error is fixed. Overwrite the original buffer with
              * the corrected sequence, and returns the error bit
              * position. */
-            std::copy_n(aux.begin(), static_cast<size_t>(bits / 8), msg.begin());
+            msg = aux;
             return static_cast<int>(j);
         }
     }
@@ -357,9 +353,7 @@ static inline int FixTwoBitsErrors(std::array<uint8_t, Message::LongMessageBytes
             int      bitmask2 = 1 << (7 - (i % 8));
             uint32_t crc1     = 0;
             uint32_t crc2     = 0;
-
-            std::copy_n(msg.begin(), static_cast<size_t>(bits / 8), aux.begin());
-
+            aux               = msg;
             aux[byte1] ^= bitmask1; /* Flip j-th bit. */    // NOLINT
             aux[byte2] ^= bitmask2; /* Flip i-th bit. */    // NOLINT
 
@@ -372,7 +366,7 @@ static inline int FixTwoBitsErrors(std::array<uint8_t, Message::LongMessageBytes
                 /* The error is fixed. Overwrite the original buffer with
                  * the corrected sequence, and returns the error bit
                  * position. */
-                std::copy_n(aux.begin(), static_cast<size_t>(bits / 8), msg.begin());
+                msg = aux;
                 // memcpy(msg, aux, static_cast<size_t>(bits / 8));
                 /* We return the two bits as a 16 bit integer by shifting
                  * 'i' on the left. This is possible since 'i' will always
@@ -399,7 +393,7 @@ static inline int FixTwoBitsErrors(std::array<uint8_t, Message::LongMessageBytes
  *
  * If the function successfully recovers a message with a correct checksum
  * it returns 1. Otherwise 0 is returned. */
-inline int ADSB1090Handler::BruteForceAp(std::array<uint8_t, Message::LongMessageBytes> const& msg, Message& mm)
+inline bool ADSB1090Handler::BruteForceAp(std::array<uint8_t, Message::LongMessageBytes> const& msg, Message& mm)
 {
     std::array<uint8_t, Message::LongMessageBytes> aux{};
 
@@ -416,8 +410,7 @@ inline int ADSB1090Handler::BruteForceAp(std::array<uint8_t, Message::LongMessag
     {
         auto lastbyte = static_cast<size_t>((msgbits / 8) - 1);
 
-        std::copy_n(msg.begin(), static_cast<size_t>(msgbits / 8), aux.begin());
-
+        aux = msg;
         /* Compute the CRC of the message and XOR it with the AP field
          * so that we recover the address, because:
          *
@@ -500,6 +493,7 @@ inline Message ADSB1090Handler::DecodeModesMessage(std::array<uint8_t, Message::
     Message  mm{};
     uint32_t crc2{}; /* Computed CRC, used to verify the message CRC. */
 
+    /* Work on our local copy */
     mm.msg = msgIn;
 
     /* Get the message type ASAP as other operations depend on this */
@@ -746,18 +740,11 @@ static inline void ApplyPhaseCorrection(uint16_t* m)
  * stream of bits and passed to the function to display it. */
 void ADSB1090Handler::DetectModeS(std::span<uint16_t> const& m)
 {
+    std::array<uint8_t, Message::LongMessageBits>      bits{};
+    std::array<uint8_t, Message::LongMessageBytes>     msg{};
+    std::array<uint16_t, Message::LongMessageBits * 2> aux{};
 
-    static constexpr uint8_t ModeSPreambleTimeInUs = 8; /* microseconds */
-    static constexpr size_t  ModeSFullLength       = (ModeSPreambleTimeInUs + Message::LongMessageBits);
-
-    auto mlen = m.size();
-
-    std::array<uint8_t, Message::LongMessageBits>       bits{};
-    std::array<uint8_t, Message::LongMessageBytes>      msg{};
-    std::array<uint16_t, Message::LongMessageBytes * 2> aux{};
-
-    uint32_t j             = 0;
-    bool     useCorrection = false;
+    bool useCorrection = false;
 
     /* The Mode S preamble is made of impulses of 0.5 microseconds at
      * the following time offsets:
@@ -782,15 +769,12 @@ void ADSB1090Handler::DetectModeS(std::span<uint16_t> const& m)
      * 8   --
      * 9   -------------------
      */
-    for (j = 0; j < mlen - (ModeSFullLength * 2); j++)
+    for (uint32_t j = 0; j < m.size() - FullLength * 2; j++)
     {
-        int low         = 0;
-        int high        = 0;
-        int delta       = 0;
-        int errors      = 0;
+        int low, high, delta, errors;
         int goodMessage = 0;
 
-        if (!useCorrection) { goto good_preamble; /* We already checked it. */ }
+        if (useCorrection) goto good_preamble; /* We already checked it. */
 
         /* First check of relations between the first 10 samples
          * representing a valid preamble. We don't even investigate further
@@ -832,9 +816,8 @@ void ADSB1090Handler::DetectModeS(std::span<uint16_t> const& m)
          * magnitude correction. */
         if (useCorrection)
         {
-            std::copy_n(m.begin() + static_cast<int>(j) + ModeSPreambleTimeInUs * 2, sizeof(aux), aux.begin());
-            // memcpy(aux, m +, sizeof(aux));
-            if ((j != 0u) && (DetectOutOfPhase(m.data() + j) != 0))
+            memcpy(aux.data(), m.data() + j + PreambleUS * 2, sizeof(aux));
+            if (j && DetectOutOfPhase(m.data() + j))
             {
                 ApplyPhaseCorrection(m.data() + j);
                 statOutOfPhase++;
@@ -847,8 +830,8 @@ void ADSB1090Handler::DetectModeS(std::span<uint16_t> const& m)
         errors = 0;
         for (uint32_t i = 0; i < Message::LongMessageBits * 2; i += 2)
         {
-            low   = m[j + i + (ModeSPreambleTimeInUs * 2)];
-            high  = m[j + i + (ModeSPreambleTimeInUs * 2) + 1];
+            low   = m[j + i + PreambleUS * 2];
+            high  = m[j + i + PreambleUS * 2 + 1];
             delta = low - high;
             if (delta < 0) { delta = -delta; }
 
@@ -870,7 +853,7 @@ void ADSB1090Handler::DetectModeS(std::span<uint16_t> const& m)
         }
 
         /* Restore the original message if we used magnitude correction. */
-        if (useCorrection) { memcpy(m.data() + j + (ModeSPreambleTimeInUs * 2), aux.data(), sizeof(aux)); }
+        if (useCorrection) memcpy(m.data() + j + PreambleUS * 2, aux.data(), sizeof(aux));
 
         /* Pack bits into bytes */
         for (size_t i = 0; i < Message::LongMessageBits; i += 8)
@@ -885,10 +868,7 @@ void ADSB1090Handler::DetectModeS(std::span<uint16_t> const& m)
         /* Last check, high and low bits are different enough in magnitude
          * to mark this as real message and not just noise? */
         delta = 0;
-        for (size_t i = 0; i < msglen * 8 * 2; i += 2)
-        {
-            delta += abs(m[j + i + (ModeSPreambleTimeInUs * 2)] - m[j + i + (ModeSPreambleTimeInUs * 2) + 1]);
-        }
+        for (size_t i = 0; i < msglen * 8 * 2; i += 2) { delta += abs(m[j + i + PreambleUS * 2] - m[j + i + PreambleUS * 2 + 1]); }
         delta /= msglen * 4;
 
         /* Filter for an average delta of three is small enough to let almost
@@ -948,7 +928,7 @@ void ADSB1090Handler::DetectModeS(std::span<uint16_t> const& m)
             /* Skip this message if we are sure it's fine. */
             if (mm.crcok != 0)
             {
-                j += (ModeSPreambleTimeInUs + (msglen * 8)) * 2;
+                j += (PreambleUS + (msglen * 8)) * 2;
                 goodMessage = 1;
                 if (useCorrection) { mm.phaseCorrected = 1; }
             }
