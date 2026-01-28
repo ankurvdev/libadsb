@@ -272,7 +272,8 @@ struct RTLSDR
                     rtlsdr_close(dev);
                 }
             }
-            return true;
+            deviceSearching = false;
+            return false;
         }
 
         static void OpenDevice(rtlsdr_dev_t* dev, RTLSDR::Config const& config)
