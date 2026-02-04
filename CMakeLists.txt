@@ -26,10 +26,8 @@ if (DEFINED LIBUSB_LIBRARIES AND DEFINED LIBUSB_INCLUDE_DIRS)
 endif()
 if (NOT TARGET usb-1.0)
     init_submodule(libusb-cmake)
-    init_submodule(libusb)
     set(libusb_BUILD_TESTING OFF CACHE BOOL "")
     set(libusb_BUILD_SHARED_LIBS OFF CACHE BOOL "libusb build static libs")
-    set(LIBUSB_ROOT ${CMAKE_CURRENT_LIST_DIR}/libusb/libusb)
     add_subdirectory(libusb-cmake)
 
     if(ANDROID)
@@ -54,7 +52,8 @@ if (NOT TARGET rtlsdr::rtlsdr)
             ${rtlsdr_ROOT}/tuner_fc0012.c
             ${rtlsdr_ROOT}/tuner_fc0013.c
             ${rtlsdr_ROOT}/tuner_fc2580.c
-            ${rtlsdr_ROOT}/tuner_r82xx.c)
+            ${rtlsdr_ROOT}/tuner_r82xx.c
+        )
         target_include_directories(rtlsdr_static PRIVATE ${rtlsdr_ROOT})
         target_compile_definitions(rtlsdr_static PUBLIC rtlsdr_STATIC)
         target_link_libraries(rtlsdr_static PUBLIC usb-1.0)

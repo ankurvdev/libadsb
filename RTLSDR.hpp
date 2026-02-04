@@ -6,6 +6,8 @@ SUPPRESS_STL_WARNINGS
 #include "SetThreadName.h"
 #include <rtl-sdr.h>
 
+RTLSDR_API int rtlsdr_open_sys_dev(rtlsdr_dev_t **out_dev, intptr_t sys_dev); //NOLINT
+
 #include <algorithm>
 #include <array>
 #include <cassert>
