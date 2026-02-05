@@ -71,8 +71,8 @@ struct IDataProvider
     virtual void NotifySelfLocation(IAirCraft const&) = 0;
 };
 
-std::unique_ptr<IDataProvider>       CreateDump1090Provider();
-std::unique_ptr<ADSB::IDataProvider> CreateFlightRadar24();
-std::unique_ptr<ADSB::IDataProvider> CreateProvider();
+std::unique_ptr<IDataProvider> CreateADSB1090Provider();
+std::unique_ptr<IDataProvider> CreateUAT978Provider();
+std::unique_ptr<IDataProvider> CreateFlightRadar24();
 
 }    // namespace ADSB

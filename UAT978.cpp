@@ -68,7 +68,6 @@ struct UAT978Handler : RTLSDR::IDataHandler, ADSB::IDataProvider
     }
     void Stop() override
     {
-        listener = nullptr;
         listener978.Stop();
     }
 

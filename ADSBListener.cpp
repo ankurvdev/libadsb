@@ -1,6 +1,6 @@
 #include "ADSB.h"
 
-struct ADSBDataProviderImpl : ADSB::IDataProvider
+struct DataProviderImpl : ADSB::IDataProvider
 {
     struct DeviceSerialNameSelector : RTLSDR::IDeviceSelector
     {
@@ -14,38 +14,35 @@ struct ADSBDataProviderImpl : ADSB::IDataProvider
         std::string_view serialName;
     };
 
-    ADSBDataProviderImpl()
-    {
-        handler978  = ADSB::TryCreateUAT978Handler(trafficManager, &rtlsdr978, ADSB::Source::UAT978);
-        handler1090 = ADSB::TryCreateADSB1090Handler(trafficManager, &rtlsdr1090, ADSB::Source::ADSB1090);
-    }
+    template <typename TFunc>
+    DataProviderImpl(TFunc func, ADSB::Source source, std::string_view selectorName) :
+        rtlsdr(selectorName), handler(func(trafficManager, &rtlsdr, source))
+    {}
 
-    ~ADSBDataProviderImpl() override = default;
-    CLASS_DELETE_COPY_AND_MOVE(ADSBDataProviderImpl);
+    ~DataProviderImpl() override = default;
+    CLASS_DELETE_COPY_AND_MOVE(DataProviderImpl);
 
     void Start(ADSB::IListener& listener) override
     {
         trafficManager->SetListener(&listener);
-        if (handler978) { handler978->Start(listener); }
-        if (handler1090) { handler1090->Start(listener); }
+        handler->Start(listener);
     }
 
-    void Stop() override
-    {
-        if (handler978) { handler978->Stop(); }
-        if (handler1090) { handler1090->Stop(); }
-    }
+    void Stop() override { handler->Stop(); }
 
     void NotifySelfLocation(ADSB::IAirCraft const& /*selfLoc*/) override {}
 
     std::shared_ptr<ADSB::TrafficManager> trafficManager = std::make_shared<ADSB::TrafficManager>();
-    std::unique_ptr<ADSB::IDataProvider>  handler978;
-    std::unique_ptr<ADSB::IDataProvider>  handler1090;
-    DeviceSerialNameSelector              rtlsdr978{"978"};
-    DeviceSerialNameSelector              rtlsdr1090{"1090"};
+    DeviceSerialNameSelector              rtlsdr;
+    std::unique_ptr<ADSB::IDataProvider>  handler;
 };
 
-std::unique_ptr<ADSB::IDataProvider> ADSB::CreateDump1090Provider()
+std::unique_ptr<ADSB::IDataProvider> ADSB::CreateADSB1090Provider()
 {
-    return std::make_unique<ADSBDataProviderImpl>();
+    return std::make_unique<DataProviderImpl>(ADSB::TryCreateADSB1090Handler, ADSB::Source::ADSB1090, "1090");
+}
+
+std::unique_ptr<ADSB::IDataProvider> ADSB::CreateUAT978Provider()
+{
+    return std::make_unique<DataProviderImpl>(ADSB::TryCreateUAT978Handler, ADSB::Source::UAT978, "978");
 }

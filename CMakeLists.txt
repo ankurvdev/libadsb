@@ -29,11 +29,6 @@ if (NOT TARGET usb-1.0)
     set(libusb_BUILD_TESTING OFF CACHE BOOL "")
     set(libusb_BUILD_SHARED_LIBS OFF CACHE BOOL "libusb build static libs")
     add_subdirectory(libusb-cmake)
-
-    if(ANDROID)
-        target_sources(usb-1.0 PRIVATE "${LIBUSB_ROOT}/os/linux_android_jni.c")
-    endif()
-
     SupressWarningForTarget(usb-1.0)
 endif()
 if (NOT TARGET usb-1.0)

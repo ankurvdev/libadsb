@@ -34,8 +34,8 @@ struct Message
     static constexpr size_t LongMessageBits  = 112;
     static constexpr size_t LongMessageBytes = LongMessageBits / 8;
 
-    static constexpr size_t ShortMessageBits  = 56;
-    static constexpr size_t ShortMessageBytes = ShortMessageBits / 8;
+    static constexpr size_t ShortMessageBits = 56;
+    // static constexpr size_t ShortMessageBytes = ShortMessageBits / 8;
 
     enum class ModeSUnit : uint8_t
     {
@@ -52,13 +52,13 @@ struct Message
     /* Generic fields */
     std::array<uint8_t, LongMessageBytes> msg; /* Binary message. */
 
-    size_t   msgbits;        /* Number of bits in message */
-    int      msgtype;        /* Downlink format # */
-    int      crcok;          /* True if CRC was valid */
-    uint32_t crc;            /* Message CRC */
-    int      errorbit;       /* Bit corrected. -1 if no bit corrected. */
-    int      aa1, aa2, aa3;  /* ICAO Address bytes 1 2 and 3 */
-    int      phaseCorrected; /* True if phase correction was applied. */
+    size_t   msgbits;       /* Number of bits in message */
+    int      msgtype;       /* Downlink format # */
+    int      crcok;         /* True if CRC was valid */
+    uint32_t crc;           /* Message CRC */
+    int      errorbit;      /* Bit corrected. -1 if no bit corrected. */
+    int      aa1, aa2, aa3; /* ICAO Address bytes 1 2 and 3 */
+                            //    int      phaseCorrected; /* True if phase correction was applied. */
 
     /* DF 11 */
     int ca; /* Responder capabilities. */
@@ -66,24 +66,24 @@ struct Message
     /* DF 17 */
     int metype; /* Extended squitter message type. */
     int mesub;  /* Extended squitter message subtype. */
-    int headingIsValid;
+    // int headingIsValid;
     int heading;
-    int aircraftType;
-    int fflag;        /* 1 = Odd, 0 = Even CPR message. */
-    int tflag;        /* UTC synchronized? */
+    // int aircraftType;
+    int fflag; /* 1 = Odd, 0 = Even CPR message. */
+    // int tflag;        /* UTC synchronized? */
     int rawLatitude;  /* Non decoded latitude */
     int rawLongitude; /* Non decoded longitude */
 
     std::array<char, 8> flight; /* 8 chars flight number. */
 
-    int ewDir;          /* 0 = East, 1 = West. */
-    int ewVelocity;     /* E/W velocity. */
-    int nsDir;          /* 0 = North, 1 = South. */
-    int nsVelocity;     /* N/S velocity. */
-    int vertRateSource; /* Vertical rate source. */
-    int vertRateSign;   /* Vertical rate sign. */
-    int vertRate;       /* Vertical rate. */
-    int velocity;       /* Computed from EW and NS velocity. */
+    int ewDir;      /* 0 = East, 1 = West. */
+    int ewVelocity; /* E/W velocity. */
+    int nsDir;      /* 0 = North, 1 = South. */
+    int nsVelocity; /* N/S velocity. */
+    // int vertRateSource; /* Vertical rate source. */
+    // int vertRateSign;   /* Vertical rate sign. */
+    // int vertRate;       /* Vertical rate. */
+    int velocity; /* Computed from EW and NS velocity. */
 
     /* DF4, DF5, DF20, DF21 */
     int fs;       /* Flight status for DF4,5,20,21 */
@@ -100,21 +100,21 @@ struct ADSB1090Handler : RTLSDR::IDataHandler, ADSB::IDataProvider
 {
     static constexpr size_t PreambleUS = 8; /*microseconds*/
 
-    static constexpr size_t LongMessageBits   = 112;
-    static constexpr size_t ShortMessageBits  = 56;
-    static constexpr size_t FullLength        = PreambleUS + LongMessageBits;
-    static constexpr size_t LongMessageBytes  = LongMessageBits / 8;
-    static constexpr size_t ShortMessageBytes = ShortMessageBits / 8;
+    static constexpr size_t LongMessageBits  = 112;
+    static constexpr size_t ShortMessageBits = 56;
+    static constexpr size_t FullLength       = PreambleUS + LongMessageBits;
+    static constexpr size_t LongMessageBytes = LongMessageBits / 8;
+    // static constexpr size_t ShortMessageBytes = ShortMessageBits / 8;
 
     static constexpr size_t BufferLength = (RTLSDR::BufferCount * RTLSDR::BufferLength) + ((FullLength - 1) * 4);
 
     struct Config
     {
 
-        bool fixErrors   = true;
-        bool checkCRC    = true;
-        bool raw         = false;
-        bool onlyaddr    = false;
+        bool fixErrors = true;
+        bool checkCRC  = true;
+        bool raw       = false;
+        // bool onlyaddr    = false;
         bool debug       = false;
         bool interactive = false;
         bool aggressive  = false;
@@ -183,7 +183,7 @@ struct ADSB1090Handler : RTLSDR::IDataHandler, ADSB::IDataProvider
     }
     void Stop() override
     {
-        listener = nullptr;
+        //listener = nullptr;
         listener1090.Stop();
     }
 
@@ -212,7 +212,7 @@ struct ADSB1090Handler : RTLSDR::IDataHandler, ADSB::IDataProvider
     ADSB::AirCraftImpl& InteractiveReceiveData(Message const& mm);
     ADSB::AirCraftImpl& InteractiveFindOrCreateAircraft(uint32_t addr);
     void                UseModesMessage(Message const& mm);
-    void                ModesSendSbsOutput(Message const& mm, ADSB::AirCraftImpl& a);
+    // void                ModesSendSbsOutput(Message const& mm, ADSB::AirCraftImpl& a);
 
     std::unordered_map<uint32_t, std::chrono::system_clock::time_point> icaoTimestamps;
 
@@ -622,8 +622,8 @@ inline Message ADSB1090Handler::DecodeModesMessage(std::array<uint8_t, Message::
         else if (mm.metype >= 9 && mm.metype <= 18)
         {
             /* Airborne position Message */
-            mm.fflag        = mm.msg[6] & (1 << 2);
-            mm.tflag        = mm.msg[6] & (1 << 3);
+            mm.fflag = mm.msg[6] & (1 << 2);
+            // mm.tflag        = mm.msg[6] & (1 << 3);
             mm.altitude     = DecodeAC12Field(mm.msg, mm.unit);
             mm.rawLatitude  = ((mm.msg[6] & 3) << 15) | (mm.msg[7] << 7) | (mm.msg[8] >> 1);
             mm.rawLongitude = ((mm.msg[8] & 1) << 16) | (mm.msg[9] << 8) | mm.msg[10];
@@ -633,13 +633,13 @@ inline Message ADSB1090Handler::DecodeModesMessage(std::array<uint8_t, Message::
             /* Airborne Velocity Message */
             if (mm.mesub == 1 || mm.mesub == 2)
             {
-                mm.ewDir          = (mm.msg[5] & 4) >> 2;
-                mm.ewVelocity     = ((mm.msg[5] & 3) << 8) | mm.msg[6];
-                mm.nsDir          = (mm.msg[7] & 0x80) >> 7;
-                mm.nsVelocity     = ((mm.msg[7] & 0x7f) << 3) | ((mm.msg[8] & 0xe0) >> 5);
-                mm.vertRateSource = (mm.msg[8] & 0x10) >> 4;
-                mm.vertRateSign   = (mm.msg[8] & 0x8) >> 3;
-                mm.vertRate       = ((mm.msg[8] & 7) << 6) | ((mm.msg[9] & 0xfc) >> 2);
+                mm.ewDir      = (mm.msg[5] & 4) >> 2;
+                mm.ewVelocity = ((mm.msg[5] & 3) << 8) | mm.msg[6];
+                mm.nsDir      = (mm.msg[7] & 0x80) >> 7;
+                mm.nsVelocity = ((mm.msg[7] & 0x7f) << 3) | ((mm.msg[8] & 0xe0) >> 5);
+                // mm.vertRateSource = (mm.msg[8] & 0x10) >> 4;
+                // mm.vertRateSign   = (mm.msg[8] & 0x8) >> 3;
+                // mm.vertRate       = ((mm.msg[8] & 7) << 6) | ((mm.msg[9] & 0xfc) >> 2);
                 /* Compute velocity and angle from the two speed
                  * components. */
                 mm.velocity = static_cast<int>(sqrt((mm.nsVelocity * mm.nsVelocity) + (mm.ewVelocity * mm.ewVelocity)));
@@ -665,12 +665,12 @@ inline Message ADSB1090Handler::DecodeModesMessage(std::array<uint8_t, Message::
             }
             else if (mm.mesub == 3 || mm.mesub == 4)
             {
-                mm.headingIsValid = mm.msg[5] & (1 << 2);
-                mm.heading        = static_cast<int>((360.0 / 128) * (((mm.msg[5] & 3) << 5) | (mm.msg[6] >> 3)));
+                // mm.headingIsValid = mm.msg[5] & (1 << 2);
+                mm.heading = static_cast<int>((360.0 / 128) * (((mm.msg[5] & 3) << 5) | (mm.msg[6] >> 3)));
             }
         }
     }
-    mm.phaseCorrected = 0; /* Set to 1 by the caller if needed. */
+    // mm.phaseCorrected = 0; /* Set to 1 by the caller if needed. */
     return mm;
 }
 
@@ -930,7 +930,7 @@ void ADSB1090Handler::DetectModeS(std::span<uint16_t> const& m)
             {
                 j += (PreambleUS + (msglen * 8)) * 2;
                 goodMessage = 1;
-                if (useCorrection) { mm.phaseCorrected = 1; }
+                // if (useCorrection) { mm.phaseCorrected = 1; }
             }
 
             /* Pass data to the next layer */
@@ -1263,3 +1263,18 @@ std::unique_ptr<RTLSDR::IDataHandler> ADSB::test::TryCreateADSB1090Handler(std::
 {
     return std::make_unique<ADSB1090Handler>(trafficManager, selectorIn, sourceId);
 }
+
+#ifdef __ANDROID__
+void android_usb_device_init_impl(int fd);
+void android_usb_device_close_impl(int fd);
+
+void android_usb_device_init_impl(int fd)
+{
+    RTLSDR::AndroidUsbDescriptorOpen(fd);
+}
+
+void android_usb_device_close_impl(int fd)
+{
+    RTLSDR::AndroidUsbDescriptorClose(fd);
+}
+#endif
