@@ -5,7 +5,7 @@ include(GenerateExportHeader)
 set(BuildEnvCMAKE_LOCATION "${CMAKE_CURRENT_LIST_DIR}")
 
 # Fix for error
-#"CMAKE_CXX_COMPILER_CLANG_SCAN_DEPS-NOTFOUND" -format=p1689 -- /usr/bin/c++ -x c++ ... 
+#"CMAKE_CXX_COMPILER_CLANG_SCAN_DEPS-NOTFOUND" -format=p1689 -- /usr/bin/c++ -x c++ ...
 #/bin/sh: 1: CMAKE_CXX_COMPILER_CLANG_SCAN_DEPS-NOTFOUND: not found
 # https://discourse.cmake.org/t/cmake-3-28-cmake-cxx-compiler-clang-scan-deps-notfound-not-found/9244/2
 set(CMAKE_CXX_SCAN_FOR_MODULES 0)
@@ -25,11 +25,11 @@ macro(_PrintFlags)
             CMAKE_EXE_LINKER_FLAGS CMAKE_SHARED_LINKER_FLAGS
             CMAKE_INTERPROCEDURAL_OPTIMIZATION)
         foreach(variantstr _INIT
-                    "               "
-                    "_DEBUG         "
-                    "_RELEASE       "
+                    ""
+                    "_DEBUG"
+                    "_RELEASE"
                     "_RELWITHDEBINFO"
-                    "_MINSIZEREL    ")
+                    "_MINSIZEREL")
             set(varname ${flagname}${variantstr})
             message(STATUS "${varname}:${${varname}}")
         endforeach()
@@ -122,6 +122,15 @@ macro(EnableStrictCompilation)
         set(CMAKE_CXX_COMPILE_OPTIONS_IPO "-flto=full")
     endif()
 
+    if (CMAKE_CROSSCOMPILING)
+        if (EMSCRIPTEN)
+            find_program(NODE_JS_EXECUTABLE NAMES nodejs node)
+            if(NODE_JS_EXECUTABLE)
+                set(CMAKE_CROSSCOMPILING_EMULATOR ${NODE_JS_EXECUTABLE})
+            endif()
+        endif()
+    endif()
+
     if (CMAKE_CXX_COMPILER_LOADED)
         find_package(Threads)
     endif()
@@ -208,7 +217,7 @@ macro(EnableStrictCompilation)
             if (DEFINED VCPKG_CRT_LINKAGE)
                 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>$<$<STREQUAL:${VCPKG_CRT_LINKAGE},dynamic>:DLL>")
             endif()
-        elseif(("${CMAKE_CXX_COMPILER_ID}" STREQUAL Clang) OR ("${CMAKE_CXX_COMPILER_ID}" STREQUAL GNU))
+        elseif(("${CMAKE_CXX_COMPILER_ID}" MATCHES Clang) OR ("${CMAKE_CXX_COMPILER_ID}" STREQUAL GNU))
             set(extraflags
                 # -fPIC via cmake CMAKE_POSITION_INDEPENDENT_CODE
                 # -fvisibility=hidden Done via cmake CMAKE_CXX_VISIBILITY_PRESET
@@ -226,10 +235,21 @@ macro(EnableStrictCompilation)
                 # -std=c++20 via CMAKE_CXX_STANDARD
                 # -fvisibility-inlines-hidden via CMAKE_VISIBILITY_INLINES_HIDDEN
             )
-
-            if (NOT EMSCRIPTEN)
+            if (APPLE AND CMAKE_LINKER_TYPE STREQUAL GNU)
+                message(WARNING "GNU linked on apple can sometimes cause issues. Consider using CMAKE_LINKER_TYPE=LLD")
+            endif()
+            if (APPLE AND ("${CMAKE_LINKER_TYPE}" STREQUAL "") AND ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang"))
+                find_program(LLVM_LD_EXECUTABLE NAMES "ld.lld" "ld64.lld" "lld")
+                if (LLVM_LD_EXECUTABLE AND EXISTS "${LLVM_LD_EXECUTABLE}")
+                    message(STATUS "Using lld from ${LLVM_LD_EXECUTABLE} as linker")
+                    set(CMAKE_LINKER_TYPE LLD)
+                endif()
+            endif()
+            if (CMAKE_LINKER_TYPE STREQUAL GNU OR "${CMAKE_LINKER_TYPE}" STREQUAL "")
                 string(APPEND CMAKE_SHARED_LINKER_FLAGS " -Wl,--exclude-libs,ALL -Wl,--no-undefined -Wl,--gc-sections")
-		string(APPEND CMAKE_EXE_LINKER_FLAGS " -Wl,--exclude-libs,ALL -Wl,--no-undefined -Wl,--gc-sections")
+                string(APPEND CMAKE_EXE_LINKER_FLAGS " -Wl,--exclude-libs,ALL -Wl,--no-undefined -Wl,--gc-sections")
+            endif()
+            if (NOT EMSCRIPTEN)
                 list(APPEND extraflags -Werror)     # All warnings as errors
             endif()
 
@@ -237,24 +257,26 @@ macro(EnableStrictCompilation)
                 list(APPEND extraflags -pthread -Wno-limited-postlink-optimizations -sASYNCIFY)
                 # string(APPEND CMAKE_LINKER_FLAGS " -Wl,-u,htonl -Wl,-u,htons")
                 #TODO https://github.com/emscripten-core/emscripten/issues/16836
-                #list(APPEND extraflags -Wl,-u,htonl -Wl,-u,htons ) 
+                #list(APPEND extraflags -Wl,-u,htonl -Wl,-u,htons )
             endif()
-            if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL Clang)
-                if (NOT DEFINED CLAND_TIDY_MODE)
-                    set(CLAND_TIDY_MODE FIX)
+            if ("${CMAKE_CXX_COMPILER_ID}" MATCHES Clang)
+                if ((NOT DEFINED CLANG_TIDY_MODE) OR ("${CLANG_TIDY_MODE}" STREQUAL ""))
+                    set(CLANG_TIDY_MODE "DISABLED")
                 endif()
                 if (NOT DEFINED CLANG_TIDY_EXECUTABLE)
                     find_program(CLANG_TIDY_EXECUTABLE NAMES "clang-tidy")
                 endif()
                 if(NOT "${CLANG_TIDY_EXECUTABLE}" STREQUAL "CLANG_TIDY_EXECUTABLE-NOTFOUND" AND NOT CMAKE_CROSSCOMPILING)
-                    if (CLANG_TIDY_MODE STREQUAL "FIX")
+                    if ("${CLANG_TIDY_MODE}" STREQUAL "FIX")
                         set(CMAKE_CXX_CLANG_TIDY ${CLANG_TIDY_EXECUTABLE} -fix)
-                    elseif(CLANG_TIDY_MODE STREQUAL "AGGRESSIVE-FIX")
+                    elseif("${CLANG_TIDY_MODE}" STREQUAL "AGGRESSIVE-FIX")
                         set(CMAKE_CXX_CLANG_TIDY ${CLANG_TIDY_EXECUTABLE} -fix -fix-errors -fix-notes)
-                    elseif("${CLANG_TIDY_MODE}" STREQUAL "")
+                    elseif("${CLANG_TIDY_MODE}" STREQUAL "CHECK")
                         set(CMAKE_CXX_CLANG_TIDY ${CLANG_TIDY_EXECUTABLE})
+                    elseif("${CLANG_TIDY_MODE}" STREQUAL "DISABLED")
+                        unset(CMAKE_CXX_CLANG_TIDY CACHE)
                     else()
-                        message(FATAL_ERROR "Unknown CLANG_TIDY_MODE=${CLANG_TIDY_MODE}. Only FIX and AGGRESSIVE-FIX supported")
+                        message(FATAL_ERROR "Unknown CLANG_TIDY_MODE=${CLANG_TIDY_MODE}. Only CHECK FIX, AGGRESSIVE-FIX, DISABLED supported")
                     endif()
                 endif()
                 list(APPEND extraflags
@@ -280,6 +302,7 @@ macro(EnableStrictCompilation)
                     -Wno-unsafe-buffer-usage
                     -Wno-disabled-macro-expansion # fmt::print(stderr, ...)
                     -Wno-nrvo # clang-21
+                    -Wno-thread-safety-negative # clang-21
                     )
             else()
                 list(APPEND extracxxflags -Wno-error=stringop-overflow)
@@ -301,6 +324,13 @@ macro(EnableStrictCompilation)
                 -Wno-padded # Dont care about auto padding
                 -Wno-nrvo # clang-21
             )
+
+            if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "AppleClang" AND NOT CMAKE_CROSSCOMPILING)
+                # AppleClang automatically adds /usr/local/include if an explicit sdk path isnt provided
+                # including /usr/local/include triggers a Wpoison-include-directories with clang
+                execute_process(COMMAND_ERROR_IS_FATAL ANY COMMAND xcrun --show-sdk-path OUTPUT_VARIABLE MACOS_SDK_PATH OUTPUT_STRIP_TRAILING_WHITESPACE)
+                list(APPEND extraflags --sysroot="${MACOS_SDK_PATH}")
+            endif()
 
             if (NOT DEFINED CPPFORGE_DISABLE_MARCH_NATIVE AND DEFINED ENV{CPPFORGE_DISABLE_MARCH_NATIVE})
                 set(CPPFORGE_DISABLE_MARCH_NATIVE $ENV{CPPFORGE_DISABLE_MARCH_NATIVE})
@@ -342,7 +372,7 @@ macro (SupressWarningForFile f)
     message(STATUS "Suppressing Warnings for ${f}")
     if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
         set_source_files_properties("${f}" PROPERTIES COMPILE_FLAGS "/W3")
-    elseif((${CMAKE_CXX_COMPILER_ID} STREQUAL Clang) OR (${CMAKE_CXX_COMPILER_ID} STREQUAL GNU))
+    elseif((${CMAKE_CXX_COMPILER_ID} MATCHES Clang) OR (${CMAKE_CXX_COMPILER_ID} STREQUAL GNU))
         set_source_files_properties("${f}" PROPERTIES COMPILE_FLAGS "-Wno-error -w")
     else()
         message(FATAL_ERROR "Unknown compiler : ${CMAKE_CXX_COMPILER_ID}")
@@ -357,7 +387,7 @@ macro (SupressWarningForTarget targetName)
             message(STATUS "Suppressing Warnings for ${targetName}::${tgttype}")
             if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
                 target_compile_options(${targetName} PRIVATE $<$<COMPILE_LANGUAGE:CXX>:/W3 /WX- >)
-            elseif((${CMAKE_CXX_COMPILER_ID} STREQUAL Clang) OR (${CMAKE_CXX_COMPILER_ID} STREQUAL GNU))
+            elseif((${CMAKE_CXX_COMPILER_ID} MATCHES Clang) OR (${CMAKE_CXX_COMPILER_ID} STREQUAL GNU))
                 target_compile_options(${targetName} PRIVATE -Wno-error -w)
             else()
                 message(FATAL_ERROR "Unknown compiler : ${CMAKE_CXX_COMPILER_ID}")

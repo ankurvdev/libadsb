@@ -14,32 +14,36 @@
 #include <libusb.h>
 #pragma clang diagnostic pop
 
-#if defined __ANDROID__
+#ifdef __ANDROID__
 #include <jni.h>
 #endif
 
-extern "C" void TESTADSB_APP_EXPORT        app_start(size_t count, ...);
-extern "C" void TESTADSB_APP_EXPORT        app_stop(size_t count, ...);
-extern "C" const char* TESTADSB_APP_EXPORT get_webserver_url();
-extern "C" void TESTADSB_APP_EXPORT        android_update_location(JNIEnv* jniEnv, jobject thiz, jobject location);
-extern "C" void TESTADSB_APP_EXPORT        android_update_orientation(JNIEnv* jniEnv, jobject thiz, jint location);
+extern "C" void TestadsbAppExport   app_start(size_t count, ...);
+extern "C" void TESTADSB_APP_EXPORT app_stop(size_t count, ...);
+get_webserver_url();
+extern "C" void TestadsbAppExport android_update_location(JNIEnv* jniEnv, jobject thiz, jobject location);
+extern "C" void TestadsbAppExport android_update_orientation(JNIEnv* jniEnv, jobject thiz, jint location);
 
-extern "C" void android_update_location(JNIEnv* /* jniEnv */, jobject /* thiz */, jobject /* location */)
+extern "C" void AndroidUpdateLocation(JNIEnv* /* jniEnv */, jobject /* thiz */, jobject /* location */)
 {}
-extern "C" void android_update_orientation(JNIEnv* /* jniEnv */, jobject /* thiz */, jint /* location */)
+extern "C" void AndroidUpdateOrientation(JNIEnv* /* jniEnv */, jobject /* thiz */, jint /* location */)
 {}
 
 struct ADSBTrackerImpl : ADSB::IListener
 {
     CLASS_DELETE_COPY_AND_MOVE(ADSBTrackerImpl);
 
-    ADSBTrackerImpl() : _dump1090Provider(ADSB::CreateDump1090Provider())
+    ADSBTrackerImpl()
     {
-        std::cout << "ADSB Tracker Initializing" << std::endl;
-        _dump1090Provider->Start(*this);
+        adsb1090->Start(*this);
+        uat978->Start(*this);
     }
 
-    ~ADSBTrackerImpl() override { _dump1090Provider->Stop(); }
+    ~ADSBTrackerImpl() override
+    {
+        adsb1090->Stop();
+        uat978->Stop();
+    }
 
     void OnChanged(ADSB::IAirCraft const& a) override
     {
@@ -47,20 +51,21 @@ struct ADSBTrackerImpl : ADSB::IListener
                   << " Heading:" << a.Heading() << " Climb:" << a.Climb() << " Lat:" << a.Lat1E7() << " Lon:" << a.Lon1E7() << std::endl;
     }
 
-    std::unordered_map<uint32_t, std::chrono::system_clock::time_point> _icaoTimestamps;
-    std::unordered_map<uint32_t, size_t>                                _aircrafts;
-    std::unique_ptr<ADSB::IDataProvider>                                _dump1090Provider;
+    std::unordered_map<uint32_t, std::chrono::system_clock::time_point> icaoTimestamps{};
+    std::unordered_map<uint32_t, size_t>                                aircrafts{};
+    std::unique_ptr<ADSB::IDataProvider>                                adsb1090 = ADSB::CreateADSB1090Provider();
+    std::unique_ptr<ADSB::IDataProvider>                                uat978   = ADSB::CreateUAT978Provider();
 
-    std::vector<uint8_t> _data;
+    std::vector<uint8_t> data{};
 
     // DataRecorder<Avid::Aircraft> _recorder;
-    std::mutex _mutex;
+    std::mutex mutex;
 };
 
-static ADSBTrackerImpl*             ptr = nullptr;
-extern "C" void TESTADSB_APP_EXPORT app_start(size_t count, ...)
+static ADSBTrackerImpl*           Ptr = nullptr;
+extern "C" void TestadsbAppExport app_start(size_t count, ...)
 {
-#if defined __ANDROID__
+#ifdef __ANDROID__
     va_list args;
     va_start(args, count);
     JavaVM* vm;
@@ -84,7 +89,7 @@ extern "C" void TESTADSB_APP_EXPORT app_stop(size_t /*count*/, ...)
     delete ptr;
 }
 
-extern "C" const char* TESTADSB_APP_EXPORT get_webserver_url()
+get_webserver_url()
 {
     return "http://localhost:41082/index.html";
 }
