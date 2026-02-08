@@ -1,8 +1,10 @@
 #pragma once
+
 #include "CommonMacros.h"
 
 SUPPRESS_WARNINGS_START
 SUPPRESS_STL_WARNINGS
+
 #include "SetThreadName.h"
 #include <rtl-sdr.h>
 
@@ -21,6 +23,7 @@ SUPPRESS_STL_WARNINGS
 #include <thread>
 #include <unordered_set>
 #include <vector>
+
 SUPPRESS_WARNINGS_END
 
 #ifndef M_PI
@@ -35,12 +38,14 @@ struct RTLSDR
 
     struct IDataHandler
     {
-        IDataHandler()          = default;
+        IDataHandler() = default;
+
         virtual ~IDataHandler() = default;
         CLASS_DEFAULT_COPY_AND_MOVE(IDataHandler);
 
         virtual void HandleData(std::span<uint8_t const> const& data) = 0;
-        virtual void OnDeviceStatusChanged(bool available)            = 0;
+
+        virtual void OnDeviceStatusChanged(bool available) = 0;
     };
 
     static constexpr int      AutoGain        = -100;
@@ -69,14 +74,20 @@ struct RTLSDR
 
     struct IDeviceSelector
     {
-        IDeviceSelector()                                                  = default;
-        virtual ~IDeviceSelector()                                         = default;
+        IDeviceSelector() = default;
+
+        virtual ~IDeviceSelector() = default;
+
         [[nodiscard]] virtual bool SelectDevice(DeviceInfo const& d) const = 0;
         CLASS_DEFAULT_COPY_AND_MOVE(IDeviceSelector);
     };
+
 #ifdef __ANDROID__
+
     static void AndroidUsbDescriptorOpen(int fd) { Manager::GetInstance()->AndroidUsbDescriptorOpen(fd); }
+
     static void AndroidUsbDescriptorClose(int fd) { Manager::GetInstance()->AndroidUsbDescriptorClose(fd); }
+
 #endif
     private:
     struct ManagerContext
@@ -99,11 +110,13 @@ struct RTLSDR
             std::scoped_lock lockGuard(MgrMutex);
             androidDescriptors.insert(fd);
         }
+
         void AndroidUsbDescriptorClose(int fd)
         {
             std::scoped_lock lockGuard(MgrMutex);
             androidDescriptors.erase(fd);
         }
+
 #endif
         SUPPRESS_WARNINGS_START
         SUPPRESS_CLANG_WARNING("-Wexit-time-destructors")
@@ -112,6 +125,7 @@ struct RTLSDR
         static inline std::mutex             MgrMutex;
         static inline std::weak_ptr<Manager> Instance;
         SUPPRESS_WARNINGS_END
+
         static std::shared_ptr<Manager> GetInstance()
         {
             std::scoped_lock lockGuard(MgrMutex);
@@ -124,7 +138,8 @@ struct RTLSDR
             return Instance.lock();
         }
 
-        Manager()  = default;
+        Manager() = default;
+
         ~Manager() = default;
         CLASS_DELETE_COPY_AND_MOVE(Manager);
 
@@ -185,21 +200,29 @@ struct RTLSDR
             ResetAllClients_(guard);
         }
 
-        void ResetAllClients_(std::unique_lock<std::mutex> const& guard)
+        void ResetAllClients_(std::unique_lock<std::mutex>& guard)
         {
             for (auto* c : _clients) { ResetClient_(guard, c); }
         }
 
-        static void ResetClient_(std::unique_lock<std::mutex> const& /*guard*/, RTLSDR* client)
+        void ResetClient_(std::unique_lock<std::mutex>& guard, RTLSDR* client)
         {
             auto* dev = client->_mgrctx.dev;
             if (dev != nullptr)
             {
                 rtlsdr_cancel_async(dev);
                 // while (client->_mgrctx.running && rtlsdr_cancel_async(dev) != 0) {}
-                //  while (client->_mgrctx.running) { std::this_thread::sleep_for(std::chrono::milliseconds{1}); }
+                while (client->_mgrctx.running)
+                {
+                    guard.unlock();
+                    std::this_thread::yield();
+                    guard.lock();
+                }
                 rtlsdr_close(dev);
                 client->_mgrctx.dev = nullptr;
+#if defined __ANDROID__
+                androidDescriptors.erase(client->_fdAndroid);
+#endif
             }
         }
 
@@ -210,7 +233,7 @@ struct RTLSDR
         // 4. SpinDown
         // 5. OnDeviceAvailable
 
-        bool MatchDeviceToClient_(std::unique_lock<std::mutex> const& /* guard */, rtlsdr_dev_t* dev)
+        RTLSDR* MatchDeviceToClient_(std::unique_lock<std::mutex> const& /* guard */, rtlsdr_dev_t* dev)
         {
             DeviceInfo d{};
             rtlsdr_get_usb_strings(dev, d.vendor, d.product, d.serial);    // NOLINT
@@ -225,10 +248,10 @@ struct RTLSDR
                 {
                     OpenDevice_(dev, client->_config);
                     client->_mgrctx.dev = dev;
-                    return true;
+                    return client;
                 }
             }
-            return false;
+            return nullptr;
 #if 0
             if (dev != nullptr)
             {
@@ -316,7 +339,9 @@ struct RTLSDR
                 {
                     rtlsdr_dev_t* dev = nullptr;
                     if (rtlsdr_open_sys_dev(&dev, fd) != 0) { continue; }
-                    if (!MatchDeviceToClient_(guard, dev)) { rtlsdr_close(dev); }
+                    auto* client = MatchDeviceToClient_(guard, dev);
+                    if (client == nullptr) { rtlsdr_close(dev); }
+                    client->_fdAndroid = fd;
                 }
 #else
                 auto deviceCount = rtlsdr_get_device_count();
@@ -325,7 +350,7 @@ struct RTLSDR
                 {
                     rtlsdr_dev_t* dev = nullptr;
                     if (rtlsdr_open(&dev, i) != 0) { continue; }
-                    if (!MatchDeviceToClient_(guard, dev)) { rtlsdr_close(dev); }
+                    if (MatchDeviceToClient_(guard, dev == nullptr)) { rtlsdr_close(dev); }
                 }
 #endif
                 _deviceSearching = false;
@@ -358,6 +383,7 @@ struct RTLSDR
             rtlsdr_reset_buffer(dev);
             //_currentGain = rtlsdr_get_tuner_gain(dev) / 10;
         }
+
         bool                        _stopRequested{false};
         bool                        _deviceSearching{false};
         std::future<void>           _deviceSearchThread;
@@ -385,6 +411,7 @@ struct RTLSDR
     }
 
     RTLSDR(uint32_t deviceIndex, Config const& config) : RTLSDR(nullptr, deviceIndex, config) {}
+
     RTLSDR(IDeviceSelector const* const selector, Config const& config) : RTLSDR(selector, InvalidDeviceIndex, config) {}
 
     CLASS_DELETE_COPY_AND_MOVE(RTLSDR);
@@ -399,7 +426,8 @@ struct RTLSDR
         size_t bufferToUse = 0;
         while (!_stopRequested)
         {
-            _testDataIFS.read(reinterpret_cast<char*>(buffers[bufferToUse].data()), BufferLength);    // NOLINT
+            _testDataIFS.read(reinterpret_cast<char*>(buffers[bufferToUse].data()),
+                              BufferLength);    // NOLINT
             if (!_testDataIFS.good())
             {
                 _testDataIFS.close();
@@ -459,6 +487,7 @@ struct RTLSDR
     }
 
     bool HasSlot(std::unique_lock<std::mutex> const& /*lock*/) const { return ((_tail + 1) % BufferCount) != _head; }
+
     bool IsEmpty(std::unique_lock<std::mutex> const& /*lock*/) const { return _head == _tail; }
 
     void OnDataAvailable(std::span<uint8_t const> const& data)
@@ -551,6 +580,7 @@ struct RTLSDR
     std::condition_variable _cvDataConsumed;
     std::atomic_bool        _stopRequested{false};
     std::atomic_bool        _started{false};
+    int                     _fdAndroid{0};
 
     std::ifstream         _testDataIFS;
     std::filesystem::path _testDataFile;
