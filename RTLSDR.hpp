@@ -350,7 +350,7 @@ struct RTLSDR
                 {
                     rtlsdr_dev_t* dev = nullptr;
                     if (rtlsdr_open(&dev, i) != 0) { continue; }
-                    if (MatchDeviceToClient_(guard, dev == nullptr)) { rtlsdr_close(dev); }
+                    if (MatchDeviceToClient_(guard, dev) == nullptr) { rtlsdr_close(dev); }
                 }
 #endif
                 _deviceSearching = false;
